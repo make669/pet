@@ -27,6 +27,7 @@ import kotlin.math.*
  * 3. 待机呼吸、小尾巴摇摆、走路晃脑、碰壁折返、转向自然面朝行进方向
  * 4. 触屏微交互：单击开心微笑+冒小心心+Q弹萌动；双击一键开启伴侣小屋
  * 5. 系统电量感知：低电困倦 zZZ，充电闪烁金色小闪电 ⚡
+ * 6. 严谨触控状态机：拖拽完全释放自愈，绝不因多次拖拽锁死卡停
  */
 @SuppressLint("ViewConstructor")
 class PetFloatingView(
@@ -85,7 +86,6 @@ class PetFloatingView(
     private var tick = 0
     private var showHeart = false
     private var heartOffsetY = 0f
-    private var dropAnimator: ValueAnimator? = null
 
     // 3. 全屏幕自主漫步与智能探索引擎
     private var currentExactX = layoutParams.x.toFloat()
@@ -94,7 +94,7 @@ class PetFloatingView(
     private var targetY = layoutParams.y.toFloat()
     private var walkDirection = 1 // 1: 向右, -1: 向左
     private var idleTicks = 0
-    private var restDuration = 60 // 停留歇息时长（约 1.5~2.5 秒）
+    private var restDuration = 45 // 停留歇息时长（约 1.2~2.0 秒）
     private var walkSpeed = 3.0f // 像素/帧
 
     // 4. 双击检测
@@ -145,7 +145,6 @@ class PetFloatingView(
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         handler.removeCallbacks(animRunnable)
-        dropAnimator?.cancel()
     }
 
     override fun performClick(): Boolean {
@@ -159,6 +158,12 @@ class PetFloatingView(
     private fun updateFreeRoam() {
         if (isDragging) return
 
+        // 容错兜底自愈：非拖拽中若状态遗留为非游荡/待机态，自动恢复 IDLE
+        if (motionState != PetMotionState.IDLE && motionState != PetMotionState.WALKING) {
+            motionState = PetMotionState.IDLE
+            idleTicks = 0
+        }
+
         val screenW = context.resources.displayMetrics.widthPixels
         val screenH = context.resources.displayMetrics.heightPixels
         val minX = 20f
@@ -171,22 +176,31 @@ class PetFloatingView(
             // 停下歇息完成后，挑选下一个全屏幕游荡目标点
             if (idleTicks > restDuration) {
                 idleTicks = 0
-                restDuration = (45..90).random() // 歇息 1.5 ~ 3 秒
+                restDuration = (35..70).random() // 歇息 1.0 ~ 2.0 秒，保持灵动活跃
 
-                // 挑选屏幕上的游荡新坐标 (兼顾底部溜达与全屏漫步)
-                val rand = Math.random()
-                val nextTargetY = when {
-                    rand < 0.45 -> (screenH * 0.65f + Math.random() * (maxY - screenH * 0.65f)).toFloat()
-                    rand < 0.80 -> (screenH * 0.32f + Math.random() * (screenH * 0.33f)).toFloat()
-                    else -> (minY + Math.random() * (screenH * 0.25f)).toFloat()
-                }.coerceIn(minY, maxY)
+                // 挑选屏幕上的游荡新坐标 (兼顾底部溜达与全屏漫步)，确保至少位移 100px
+                var nextTargetX = currentExactX
+                var nextTargetY = currentExactY
+                for (i in 0 until 5) {
+                    val rand = Math.random()
+                    val candY = when {
+                        rand < 0.45 -> (screenH * 0.65f + Math.random() * (maxY - screenH * 0.65f)).toFloat()
+                        rand < 0.80 -> (screenH * 0.32f + Math.random() * (screenH * 0.33f)).toFloat()
+                        else -> (minY + Math.random() * (screenH * 0.25f)).toFloat()
+                    }.coerceIn(minY, maxY)
 
-                val nextTargetX = (minX + Math.random() * (maxX - minX)).toFloat().coerceIn(minX, maxX)
+                    val candX = (minX + Math.random() * (maxX - minX)).toFloat().coerceIn(minX, maxX)
+                    if (hypot((candX - currentExactX).toDouble(), (candY - currentExactY).toDouble()) > 100f || i == 4) {
+                        nextTargetX = candX
+                        nextTargetY = candY
+                        break
+                    }
+                }
 
                 targetX = nextTargetX
                 targetY = nextTargetY
                 walkDirection = if (targetX >= currentExactX) 1 else -1
-                walkSpeed = (2.4f + Math.random() * 1.4f).toFloat() // 略微变频步态
+                walkSpeed = (2.6f + Math.random() * 1.5f).toFloat() // 略微变频步态
                 motionState = PetMotionState.WALKING
             }
         } else if (motionState == PetMotionState.WALKING) {
@@ -455,7 +469,6 @@ class PetFloatingView(
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
-                dropAnimator?.cancel()
                 initialX = layoutParams.x
                 initialY = layoutParams.y
                 initialTouchX = event.rawX
@@ -494,12 +507,23 @@ class PetFloatingView(
             MotionEvent.ACTION_UP -> {
                 scaleXFactor = 1.0f
                 scaleYFactor = 1.0f
-                if (!isDragging) {
+                val wasDragging = isDragging
+                isDragging = false // 立即重置拖拽标志
+
+                if (!wasDragging) {
                     performClick()
                     handlePetClick()
                 } else {
                     onPetReleased()
                 }
+                return true
+            }
+
+            MotionEvent.ACTION_CANCEL -> {
+                scaleXFactor = 1.0f
+                scaleYFactor = 1.0f
+                isDragging = false // 立即重置拖拽标志
+                onPetReleased()
                 return true
             }
         }
@@ -523,7 +547,7 @@ class PetFloatingView(
         triggerSquashAndStretch()
         motionState = PetMotionState.IDLE
         idleTicks = 0
-        restDuration = 70 // 抚摸后温顺停下歇息 2 秒
+        restDuration = 45 // 抚摸后温顺停下歇息 1.5 秒
         invalidate()
         handler.removeCallbacks(hideHeartRunnable)
         handler.postDelayed(hideHeartRunnable, 1200)
@@ -542,11 +566,14 @@ class PetFloatingView(
     }
 
     private fun onPetReleased() {
+        isDragging = false // 双重保险
         currentExactX = layoutParams.x.toFloat()
         currentExactY = layoutParams.y.toFloat()
+        targetX = currentExactX
+        targetY = currentExactY
         motionState = PetMotionState.IDLE
         idleTicks = 0
-        restDuration = 40 // 释放后先停稳 1 秒
+        restDuration = 25 // 释放后快速进入状态（停稳 0.8 秒即开启游荡）
         triggerSquashAndStretch()
         invalidate()
     }

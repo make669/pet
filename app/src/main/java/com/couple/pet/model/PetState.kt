@@ -4,8 +4,11 @@ package com.couple.pet.model
  * 宠物当前的物理/运动状态
  */
 enum class PetMotionState {
-    IDLE,       // 站立发呆
-    WALKING,    // 漫步走动
+    IDLE,       // 站立发呆/歪头打量
+    WALKING,    // 悠闲慢步走动
+    RUNNING,    // 撒欢兴奋快跑
+    SNIFFING,   // 停下低头嗅嗅探险
+    SHAKING,    // 全身甩毛抖抖
     CLIMBING,   // 边缘攀爬
     DRAGGED,    // 被手指拎起挣扎
     FALLING,    // 松手自由落体

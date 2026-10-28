@@ -5,22 +5,30 @@ import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Context
-import android.graphics.Canvas
-import android.graphics.Paint
-import android.graphics.RectF
+import android.content.Intent
+import android.graphics.*
 import android.os.Handler
 import android.os.Looper
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
-import android.view.animation.BounceInterpolator
+import android.view.animation.OvershootInterpolator
 import androidx.core.graphics.toColorInt
+import com.couple.pet.MainActivity
 import com.couple.pet.model.PetMotionState
 import com.couple.pet.network.PetSyncEngine
-import kotlin.math.abs
+import kotlin.math.*
 
 /**
- * 桌面悬浮宠物核心绘制与物理交互视图
+ * 桌面悬浮宠物：极简治愈系“线条小狗”
+ * 针对手机小屏幕进行了深度体验优化：
+ * 1. 彻底去除遮挡屏幕的头顶气泡操作栏，占位紧凑纯净（200x200），不误触其他应用
+ * 2. 真实 2D 全屏幕自主到处游荡与智能探索漫步（X / Y 轴自由漫游）
+ * 3. 待机呼吸、小尾巴摇摆、走路晃脑、碰壁折返、转向自然面朝行进方向
+ * 4. 触屏微交互：单击开心微笑+冒小心心+Q弹萌动；双击一键开启伴侣小屋
+ * 5. 系统电量感知：低电困倦 zZZ，充电闪烁金色小闪电 ⚡
+ * 6. 严谨触控状态机：拖拽完全释放自愈，绝不因多次拖拽锁死卡停
+ * 7. 严格坐标平滑防闪现算法：统一拖拽与漫步屏幕安全边界，拖到底部自然沿地面巡逻，杜绝瞬间瞬移
  */
 @SuppressLint("ViewConstructor")
 class PetFloatingView(
@@ -29,35 +37,41 @@ class PetFloatingView(
     private val layoutParams: WindowManager.LayoutParams
 ) : View(context) {
 
-    private val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = "#FF9E80".toColorInt() // 可爱橘猫暖橙色
+    // 1. 画笔配置
+    private val furPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
         style = Paint.Style.FILL
     }
 
-    private val earPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = "#FF6E40".toColorInt()
-        style = Paint.Style.FILL
+    private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = "#1E1E1E".toColorInt()
+        style = Paint.Style.STROKE
+        strokeWidth = 5.0f
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
     }
 
     private val eyePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = "#263238".toColorInt()
+        color = "#1E1E1E".toColorInt()
         style = Paint.Style.FILL
-        strokeWidth = 4f
-        strokeCap = Paint.Cap.ROUND
     }
 
     private val blushPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = "#FF80AB".toColorInt() // 粉嫩腮红
+        color = "#FFAFC0".toColorInt()
         style = Paint.Style.FILL
     }
 
-    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = "#D81B60".toColorInt()
-        textSize = 32f
-        textAlign = Paint.Align.CENTER
-        isFakeBoldText = true
+    private val heartPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = "#FF4B68".toColorInt()
+        style = Paint.Style.FILL
     }
 
+    private val emojiPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = 30f
+        textAlign = Paint.Align.CENTER
+    }
+
+    // 2. 状态机与物理属性
     private var motionState: PetMotionState = PetMotionState.IDLE
     private var initialX = 0
     private var initialY = 0
@@ -65,35 +79,73 @@ class PetFloatingView(
     private var initialTouchY = 0f
     private var isDragging = false
 
-    // 预分配 Shape 矩形对象，避免在 onDraw 频繁创建垃圾触发 GC
-    private val leftEarRect = RectF()
-    private val rightEarRect = RectF()
-    private val bodyRect = RectF()
+    // 落地形变缩放 (Squash & Stretch)
+    private var scaleXFactor = 1.0f
+    private var scaleYFactor = 1.0f
 
-    // 自由落体动画
-    private var dropAnimator: ValueAnimator? = null
+    // 动画游标与心跳
+    private var tick = 0
+    private var showHeart = false
+    private var heartOffsetY = 0f
 
-    // 心跳/动画帧游标
-    private var animTick = 0
-    private var showHeartBubble = false
+    // 3. 全屏幕自主漫步与智能探索引擎
+    private var currentExactX = layoutParams.x.toFloat()
+    private var currentExactY = layoutParams.y.toFloat()
+    private var targetX = layoutParams.x.toFloat()
+    private var targetY = layoutParams.y.toFloat()
+    private var walkDirection = 1 // 1: 向右, -1: 向左
+    private var idleTicks = 0
+    private var restDuration = 45 // 停留歇息时长（约 1.2~2.0 秒）
+    private var walkSpeed = 2.6f // 像素/帧，平稳温和步速
+
+    // 4. 双击检测
+    private var lastClickTime = 0L
+
+    // 5. 系统电量与充电状态
+    private var batteryLevel: Int = 100
+    private var isCharging: Boolean = false
+
+    // 预分配 Path
+    private val headPath = Path()
+    private val leftEarPath = Path()
+    private val rightEarPath = Path()
+    private val bodyPath = Path()
+    private val tailPath = Path()
+    private val heartPath = Path()
+
     private val handler = Handler(Looper.getMainLooper())
     private val animRunnable = object : Runnable {
         override fun run() {
-            animTick = (animTick + 1) % 60
+            tick++
+            if (showHeart) {
+                heartOffsetY = (heartOffsetY - 2.0f).coerceAtLeast(-45f)
+            }
+
+            // 全屏幕自由漫步算法驱动
+            updateFreeRoam()
+
             invalidate()
-            handler.postDelayed(this, 80)
+            handler.postDelayed(this, 30) // ~33fps
         }
     }
 
     init {
+        currentExactX = layoutParams.x.toFloat()
+        currentExactY = layoutParams.y.toFloat()
+        targetX = currentExactX
+        targetY = currentExactY
         handler.post(animRunnable)
+    }
+
+    fun updateBatteryStatus(level: Int, charging: Boolean) {
+        this.batteryLevel = level
+        this.isCharging = charging
+        invalidate()
     }
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         handler.removeCallbacks(animRunnable)
-        dropAnimator?.cancel()
-        dropAnimator = null
     }
 
     override fun performClick(): Boolean {
@@ -101,69 +153,360 @@ class PetFloatingView(
         return true
     }
 
+    /**
+     * 统一屏幕安全活动边界，避免拖拽与漫步边界脱节导致瞬移闪现
+     */
+    private fun getScreenBounds(): RectF {
+        val screenW = context.resources.displayMetrics.widthPixels.toFloat()
+        val screenH = context.resources.displayMetrics.heightPixels.toFloat()
+        val minX = 20f
+        val maxX = (screenW - width - 20f).coerceAtLeast(minX)
+        val minY = 120f // 避免挡住顶部通知栏
+        val maxY = (screenH - height - 80f).coerceAtLeast(minY) // 贴合底部导航栏上方，舒适停靠地面
+        return RectF(minX, minY, maxX, maxY)
+    }
+
+    /**
+     * 全屏幕 2D 自主游荡探索算法 (X & Y 自由游走)
+     */
+    private fun updateFreeRoam() {
+        if (isDragging) return
+
+        // 容错兜底自愈：非拖拽中若状态遗留为非游荡/待机态，自动恢复 IDLE
+        if (motionState != PetMotionState.IDLE && motionState != PetMotionState.WALKING) {
+            motionState = PetMotionState.IDLE
+            idleTicks = 0
+        }
+
+        val bounds = getScreenBounds()
+
+        if (motionState == PetMotionState.IDLE) {
+            idleTicks++
+            // 停下短暂歇息嗅闻后，挑选下一个全屏幕游荡目标点
+            if (idleTicks > restDuration) {
+                idleTicks = 0
+                restDuration = (35..70).random() // 每次短歇 1.0 ~ 2.0 秒，保持灵动活跃
+
+                // 判断小狗当前是否处于底部地面区域
+                val isNearBottom = currentExactY >= bounds.bottom - 120f
+
+                var nextTargetX = currentExactX
+                var nextTargetY = currentExactY
+
+                for (i in 0 until 5) {
+                    val candX = (bounds.left + Math.random() * (bounds.right - bounds.left)).toFloat()
+                    val candY = if (isNearBottom) {
+                        // 85% 概率保持在地面巡视（平稳沿地面横向走），绝不突兀瞬移到天上
+                        if (Math.random() < 0.85) {
+                            bounds.bottom - (Math.random() * 30f).toFloat()
+                        } else {
+                            (bounds.top + (bounds.bottom - bounds.top) * 0.5f + Math.random() * ((bounds.bottom - bounds.top) * 0.4f)).toFloat()
+                        }
+                    } else {
+                        // 在半空或中部时，平缓漫游或缓慢降落到地面
+                        val rand = Math.random()
+                        when {
+                            rand < 0.50 -> bounds.bottom - (Math.random() * 50f).toFloat()
+                            rand < 0.80 -> (bounds.top + (bounds.bottom - bounds.top) * 0.35f + Math.random() * ((bounds.bottom - bounds.top) * 0.35f)).toFloat()
+                            else -> (bounds.top + Math.random() * ((bounds.bottom - bounds.top) * 0.35f)).toFloat()
+                        }
+                    }.coerceIn(bounds.top, bounds.bottom)
+
+                    if (hypot((candX - currentExactX).toDouble(), (candY - currentExactY).toDouble()) > 80f || i == 4) {
+                        nextTargetX = candX
+                        nextTargetY = candY
+                        break
+                    }
+                }
+
+                targetX = nextTargetX
+                targetY = nextTargetY
+                walkDirection = if (targetX >= currentExactX) 1 else -1
+                walkSpeed = (2.2f + Math.random() * 1.0f).toFloat() // 平滑温和步频
+                motionState = PetMotionState.WALKING
+            }
+        } else if (motionState == PetMotionState.WALKING) {
+            val dx = targetX - currentExactX
+            val dy = targetY - currentExactY
+            val dist = hypot(dx.toDouble(), dy.toDouble()).toFloat()
+
+            if (dist <= walkSpeed + 1.5f || dist < 1.0f) {
+                // 顺利到达目标点，坐下休息嗅闻
+                currentExactX = targetX
+                currentExactY = targetY
+                layoutParams.x = targetX.toInt()
+                layoutParams.y = targetY.toInt()
+                try {
+                    windowManager.updateViewLayout(this, layoutParams)
+                } catch (_: Exception) {}
+                motionState = PetMotionState.IDLE
+                idleTicks = 0
+            } else {
+                // 沿矢量向目标步进，严格防范 NaN 与瞬移
+                val stepX = (dx / dist) * walkSpeed
+                val stepY = (dy / dist) * walkSpeed
+
+                if (!stepX.isNaN() && !stepY.isNaN()) {
+                    currentExactX = (currentExactX + stepX).coerceIn(bounds.left, bounds.right)
+                    currentExactY = (currentExactY + stepY).coerceIn(bounds.top, bounds.bottom)
+
+                    walkDirection = if (dx >= 0) 1 else -1
+
+                    layoutParams.x = currentExactX.toInt()
+                    layoutParams.y = currentExactY.toInt()
+                    try {
+                        windowManager.updateViewLayout(this, layoutParams)
+                    } catch (_: Exception) {}
+                }
+            }
+        }
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val w = width.toFloat()
         val h = height.toFloat()
         val centerX = w / 2f
-        val centerY = h / 2f
+        val centerY = h / 2f + 5f
 
-        // 呼吸微动偏移
+        // 1. 落地挤压缩放与朝向翻转
+        canvas.save()
+        canvas.scale(scaleXFactor, scaleYFactor, centerX, centerY + 35f)
+
+        // 漫步或待机微动
         val breathOffset = if (motionState == PetMotionState.IDLE) {
-            ((animTick % 10) - 5) * 0.4f
+            sin(tick * 0.12).toFloat() * 2.0f
+        } else if (motionState == PetMotionState.WALKING) {
+            // 走路时的晃脑与微颠簸
+            sin(tick * 0.38).toFloat() * 3.2f
         } else {
             0f
         }
 
-        // 1. 绘制耳朵
-        leftEarRect.set(centerX - 48f, centerY - 52f, centerX - 12f, centerY - 16f)
-        rightEarRect.set(centerX + 12f, centerY - 52f, centerX + 48f, centerY - 16f)
-        canvas.drawRoundRect(leftEarRect, 8f, 8f, earPaint)
-        canvas.drawRoundRect(rightEarRect, 8f, 8f, earPaint)
-
-        // 2. 绘制圆润身体
-        bodyRect.set(centerX - 50f, centerY - 28f + breathOffset, centerX + 50f, centerY + 46f + breathOffset)
-        canvas.drawRoundRect(bodyRect, 32f, 32f, bodyPaint)
-
-        // 3. 绘制眼睛（被拎起时眯眼，平时圆眼）
-        if (motionState == PetMotionState.DRAGGED) {
-            // 挣扎闭眼 > <
-            canvas.drawLine(centerX - 24f, centerY - 6f, centerX - 12f, centerY, eyePaint)
-            canvas.drawLine(centerX - 12f, centerY, centerX - 24f, centerY + 6f, eyePaint)
-            canvas.drawLine(centerX + 24f, centerY - 6f, centerX + 12f, centerY, eyePaint)
-            canvas.drawLine(centerX + 12f, centerY, centerX + 24f, centerY + 6f, eyePaint)
+        // 漫步摇摆角度
+        val waddleAngle = if (motionState == PetMotionState.WALKING) {
+            sin(tick * 0.38).toFloat() * 5.0f * walkDirection
         } else {
-            // 眨眼动画
-            val isBlinking = animTick in 45..48
-            if (isBlinking) {
-                canvas.drawLine(centerX - 24f, centerY, centerX - 12f, centerY, eyePaint)
-                canvas.drawLine(centerX + 12f, centerY, centerX + 24f, centerY, eyePaint)
+            0f
+        }
+
+        canvas.save()
+        canvas.rotate(waddleAngle, centerX, centerY + 25f)
+
+        // 行走时跟随朝向整体镜像翻转（小狗面朝前进方向）
+        canvas.scale(walkDirection.toFloat(), 1f, centerX, centerY)
+
+        // 绘制尾巴
+        drawTail(canvas, centerX, centerY, breathOffset)
+
+        // 绘制身体与小短腿
+        drawBody(canvas, centerX, centerY, breathOffset)
+
+        // 绘制头和耳朵
+        drawHeadAndEars(canvas, centerX, centerY, breathOffset)
+
+        // 绘制五官
+        drawFaceFeatures(canvas, centerX, centerY, breathOffset)
+
+        // 绘制前爪爪与爱心
+        drawFrontPawsAndHeart(canvas, centerX, centerY, breathOffset)
+
+        canvas.restore()
+        canvas.restore()
+
+        // 2. 充电或低电状态标识（贴身小标记）
+        drawBatteryIndicators(canvas, centerX, centerY - 55f)
+
+        // 3. 点击冒红心
+        if (showHeart) {
+            drawFloatingHeart(canvas, centerX, centerY - 60f + heartOffsetY)
+        }
+    }
+
+    /**
+     * 充电光标或低电量标记
+     */
+    private fun drawBatteryIndicators(canvas: Canvas, cx: Float, topY: Float) {
+        if (isCharging) {
+            // 充电闪烁金黄小闪电 ⚡
+            val sparkY = topY + sin(tick * 0.2).toFloat() * 3f
+            canvas.drawText("⚡", cx + 26f, sparkY, emojiPaint)
+        } else if (batteryLevel < 20) {
+            // 低电量困倦 zZZ
+            canvas.drawText("💤", cx + 26f, topY, emojiPaint)
+        }
+    }
+
+    private fun drawTail(canvas: Canvas, cx: Float, cy: Float, breath: Float) {
+        val tailBaseX = cx + 28f
+        val tailBaseY = cy + 24f + breath
+
+        val tailAngle = when (motionState) {
+            PetMotionState.DRAGGED -> sin(tick * 0.45).toFloat() * 28f
+            PetMotionState.WALKING -> sin(tick * 0.38).toFloat() * 22f
+            PetMotionState.IDLE -> sin(tick * 0.16).toFloat() * 16f
+            else -> 0f
+        }
+
+        canvas.save()
+        canvas.rotate(tailAngle, tailBaseX, tailBaseY)
+
+        tailPath.reset()
+        tailPath.moveTo(tailBaseX, tailBaseY)
+        tailPath.quadTo(tailBaseX + 16f, tailBaseY - 12f, tailBaseX + 10f, tailBaseY - 22f)
+        tailPath.quadTo(tailBaseX + 5f, tailBaseY - 24f, tailBaseX + 3f, tailBaseY - 17f)
+        tailPath.quadTo(tailBaseX + 7f, tailBaseY - 8f, tailBaseX, tailBaseY + 6f)
+        tailPath.close()
+
+        canvas.drawPath(tailPath, furPaint)
+        canvas.drawPath(tailPath, strokePaint)
+        canvas.restore()
+    }
+
+    private fun drawBody(canvas: Canvas, cx: Float, cy: Float, breath: Float) {
+        val bodyY = cy + 15f + breath
+        bodyPath.reset()
+        bodyPath.moveTo(cx - 26f, bodyY - 8f)
+        bodyPath.quadTo(cx - 36f, bodyY + 18f, cx - 24f, bodyY + 27f)
+        bodyPath.quadTo(cx - 17f, bodyY + 29f, cx - 12f, bodyY + 27f)
+        bodyPath.lineTo(cx + 12f, bodyY + 27f)
+        bodyPath.quadTo(cx + 17f, bodyY + 29f, cx + 24f, bodyY + 27f)
+        bodyPath.quadTo(cx + 36f, bodyY + 18f, cx + 26f, bodyY - 8f)
+        bodyPath.close()
+
+        canvas.drawPath(bodyPath, furPaint)
+        canvas.drawPath(bodyPath, strokePaint)
+
+        // 走动时脚掌微抬交互
+        val walkLegOffset = if (motionState == PetMotionState.WALKING) {
+            sin(tick * 0.38).toFloat() * 3.5f
+        } else {
+            0f
+        }
+
+        // 小短腿
+        canvas.drawCircle(cx - 18f, bodyY + 26f + walkLegOffset, 4.8f, furPaint)
+        canvas.drawCircle(cx - 18f, bodyY + 26f + walkLegOffset, 4.8f, strokePaint)
+
+        canvas.drawCircle(cx + 18f, bodyY + 26f - walkLegOffset, 4.8f, furPaint)
+        canvas.drawCircle(cx + 18f, bodyY + 26f - walkLegOffset, 4.8f, strokePaint)
+    }
+
+    private fun drawHeadAndEars(canvas: Canvas, cx: Float, cy: Float, breath: Float) {
+        val headY = cy - 10f + breath
+
+        // 左耳
+        leftEarPath.reset()
+        leftEarPath.moveTo(cx - 24f, headY - 14f)
+        leftEarPath.cubicTo(cx - 45f, headY - 14f, cx - 44f, headY + 16f, cx - 25f, headY + 12f)
+        leftEarPath.close()
+        canvas.drawPath(leftEarPath, furPaint)
+        canvas.drawPath(leftEarPath, strokePaint)
+
+        // 右耳
+        rightEarPath.reset()
+        rightEarPath.moveTo(cx + 24f, headY - 14f)
+        rightEarPath.cubicTo(cx + 45f, headY - 14f, cx + 44f, headY + 16f, cx + 25f, headY + 12f)
+        rightEarPath.close()
+        canvas.drawPath(rightEarPath, furPaint)
+        canvas.drawPath(rightEarPath, strokePaint)
+
+        // 脑袋
+        headPath.reset()
+        headPath.moveTo(cx - 28f, headY)
+        headPath.cubicTo(cx - 30f, headY - 26f, cx + 30f, headY - 26f, cx + 28f, headY)
+        headPath.cubicTo(cx + 34f, headY + 22f, cx - 34f, headY + 22f, cx - 28f, headY)
+        headPath.close()
+
+        canvas.drawPath(headPath, furPaint)
+        canvas.drawPath(headPath, strokePaint)
+    }
+
+    private fun drawFaceFeatures(canvas: Canvas, cx: Float, cy: Float, breath: Float) {
+        val faceY = cy - 8f + breath
+
+        if (motionState == PetMotionState.DRAGGED) {
+            // 被拎起受困闭眼 (> <)
+            canvas.drawLine(cx - 21f, faceY - 7f, cx - 14f, faceY - 2f, strokePaint)
+            canvas.drawLine(cx - 14f, faceY - 2f, cx - 21f, faceY + 3f, strokePaint)
+
+            canvas.drawLine(cx + 21f, faceY - 7f, cx + 14f, faceY - 2f, strokePaint)
+            canvas.drawLine(cx + 14f, faceY - 2f, cx + 21f, faceY + 3f, strokePaint)
+        } else {
+            if (showHeart) {
+                // 开心微笑眯眼 (^ ^)
+                canvas.drawArc(cx - 22f, faceY - 8f, cx - 12f, faceY + 2f, 200f, 140f, false, strokePaint)
+                canvas.drawArc(cx + 12f, faceY - 8f, cx + 22f, faceY + 2f, 200f, 140f, false, strokePaint)
+            } else if (batteryLevel < 20 && !isCharging) {
+                // 低电量疲倦下垂眼
+                canvas.drawLine(cx - 21f, faceY - 2f, cx - 14f, faceY - 2f, strokePaint)
+                canvas.drawLine(cx + 14f, faceY - 2f, cx + 21f, faceY - 2f, strokePaint)
             } else {
-                canvas.drawCircle(centerX - 18f, centerY - 2f + breathOffset, 5f, eyePaint)
-                canvas.drawCircle(centerX + 18f, centerY - 2f + breathOffset, 5f, eyePaint)
+                // 乌溜溜纯真豆豆眼
+                canvas.drawCircle(cx - 18f, faceY - 3f, 4.0f, eyePaint)
+                canvas.drawCircle(cx + 18f, faceY - 3f, 4.0f, eyePaint)
             }
         }
 
-        // 4. 粉嫩腮红
-        canvas.drawCircle(centerX - 30f, centerY + 10f + breathOffset, 7f, blushPaint)
-        canvas.drawCircle(centerX + 30f, centerY + 10f + breathOffset, 7f, blushPaint)
+        // 软萌粉腮红
+        val blushAlpha = if (showHeart) 230 else 160
+        blushPaint.alpha = blushAlpha
+        canvas.drawCircle(cx - 24f, faceY + 5f, 6.5f, blushPaint)
+        canvas.drawCircle(cx + 24f, faceY + 5f, 6.5f, blushPaint)
 
-        // 5. 点击冒爱心气泡
-        if (showHeartBubble) {
-            canvas.drawText("❤️ +1", centerX, centerY - 50f, textPaint)
-        }
+        // 纽扣小黑鼻与小狗微笑嘴
+        canvas.drawOval(cx - 4.0f, faceY + 2f, cx + 4.0f, faceY + 6.8f, eyePaint)
+        canvas.drawArc(cx - 7f, faceY + 4.5f, cx, faceY + 11.5f, 10f, 160f, false, strokePaint)
+        canvas.drawArc(cx, faceY + 4.5f, cx + 7f, faceY + 11.5f, 10f, 160f, false, strokePaint)
+    }
+
+    private fun drawFrontPawsAndHeart(canvas: Canvas, cx: Float, cy: Float, breath: Float) {
+        val chestY = cy + 11f + breath
+        heartPath.reset()
+        val heartScale = 0.48f
+        heartPath.moveTo(cx, chestY + 10f)
+        heartPath.cubicTo(cx - 18f * heartScale, chestY - 18f * heartScale, cx - 36f * heartScale, chestY + 4f * heartScale, cx, chestY + 32f * heartScale)
+        heartPath.cubicTo(cx + 36f * heartScale, chestY + 4f * heartScale, cx + 18f * heartScale, chestY - 18f * heartScale, cx, chestY + 10f)
+        heartPath.close()
+
+        canvas.drawPath(heartPath, heartPaint)
+        canvas.drawPath(heartPath, strokePaint)
+
+        canvas.drawCircle(cx - 11f, chestY + 10f, 5.5f, furPaint)
+        canvas.drawCircle(cx - 11f, chestY + 10f, 5.5f, strokePaint)
+        canvas.drawCircle(cx + 11f, chestY + 10f, 5.5f, furPaint)
+        canvas.drawCircle(cx + 11f, chestY + 10f, 5.5f, strokePaint)
+    }
+
+    private fun drawFloatingHeart(canvas: Canvas, cx: Float, cy: Float) {
+        val floatHeart = Path()
+        val s = 0.6f
+        floatHeart.moveTo(cx, cy + 8f * s)
+        floatHeart.cubicTo(cx - 20f * s, cy - 20f * s, cx - 40f * s, cy + 5f * s, cx, cy + 36f * s)
+        floatHeart.cubicTo(cx + 40f * s, cy + 5f * s, cx + 20f * s, cy - 20f * s, cx, cy + 8f * s)
+        floatHeart.close()
+
+        canvas.drawPath(floatHeart, heartPaint)
+        canvas.drawPath(floatHeart, strokePaint)
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
-                dropAnimator?.cancel()
                 initialX = layoutParams.x
                 initialY = layoutParams.y
                 initialTouchX = event.rawX
                 initialTouchY = event.rawY
                 isDragging = false
                 motionState = PetMotionState.DRAGGED
+                idleTicks = 0
+                // 触控瞬间锁定当前目标，杜绝残留位移
+                currentExactX = initialX.toFloat()
+                currentExactY = initialY.toFloat()
+                targetX = currentExactX
+                targetY = currentExactY
+                scaleXFactor = 0.94f
+                scaleYFactor = 1.08f
                 invalidate()
                 return true
             }
@@ -175,13 +518,16 @@ class PetFloatingView(
                     isDragging = true
                 }
 
-                val screenWidth = context.resources.displayMetrics.widthPixels
-                val screenHeight = context.resources.displayMetrics.heightPixels
-                val clampedX = (initialX + dx).coerceIn(0, screenWidth - width)
-                val clampedY = (initialY + dy).coerceIn(0, screenHeight - height)
+                val bounds = getScreenBounds()
+                val clampedX = (initialX + dx).coerceIn(bounds.left.toInt(), bounds.right.toInt())
+                val clampedY = (initialY + dy).coerceIn(bounds.top.toInt(), bounds.bottom.toInt())
 
                 layoutParams.x = clampedX
                 layoutParams.y = clampedY
+                currentExactX = clampedX.toFloat()
+                currentExactY = clampedY.toFloat()
+                targetX = currentExactX
+                targetY = currentExactY
                 try {
                     windowManager.updateViewLayout(this, layoutParams)
                 } catch (_: Exception) {}
@@ -189,56 +535,104 @@ class PetFloatingView(
             }
 
             MotionEvent.ACTION_UP -> {
-                if (!isDragging) {
+                scaleXFactor = 1.0f
+                scaleYFactor = 1.0f
+                val wasDragging = isDragging
+                isDragging = false // 立即重置拖拽标志
+
+                if (!wasDragging) {
                     performClick()
-                    onPetClicked()
+                    handlePetClick()
                 } else {
                     onPetReleased()
                 }
+                return true
+            }
+
+            MotionEvent.ACTION_CANCEL -> {
+                scaleXFactor = 1.0f
+                scaleYFactor = 1.0f
+                isDragging = false // 立即重置拖拽标志
+                onPetReleased()
                 return true
             }
         }
         return super.onTouchEvent(event)
     }
 
-    private fun onPetClicked() {
-        motionState = PetMotionState.IDLE
-        showHeartBubble = true
+    private fun handlePetClick() {
+        val now = System.currentTimeMillis()
+        if (now - lastClickTime < 350) {
+            // 双击：无缝开启伴侣应用主界面
+            lastClickTime = 0L
+            launchMainActivity()
+            return
+        }
+        lastClickTime = now
+
+        // 单击：摸摸小狗，开心眯眼、红心冒出、Q弹回弹
         PetSyncEngine.poke()
+        showHeart = true
+        heartOffsetY = 0f
+        triggerSquashAndStretch()
+        motionState = PetMotionState.IDLE
+        idleTicks = 0
+        restDuration = 45 // 抚摸后温顺停下歇息 1.5 秒
         invalidate()
-        handler.postDelayed({
-            showHeartBubble = false
-            invalidate()
-        }, 1200)
+        handler.removeCallbacks(hideHeartRunnable)
+        handler.postDelayed(hideHeartRunnable, 1200)
+    }
+
+    private val hideHeartRunnable = Runnable {
+        showHeart = false
+        invalidate()
+    }
+
+    private fun launchMainActivity() {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        context.startActivity(intent)
     }
 
     private fun onPetReleased() {
-        val screenHeight = context.resources.displayMetrics.heightPixels
-        val targetY = (screenHeight * 0.72f).toInt() // 掉落停靠目标线
+        val bounds = getScreenBounds()
+        isDragging = false // 双重保险
+        currentExactX = layoutParams.x.toFloat().coerceIn(bounds.left, bounds.right)
+        currentExactY = layoutParams.y.toFloat().coerceIn(bounds.top, bounds.bottom)
+        layoutParams.x = currentExactX.toInt()
+        layoutParams.y = currentExactY.toInt()
+        targetX = currentExactX
+        targetY = currentExactY
+        motionState = PetMotionState.IDLE
+        idleTicks = 0
+        restDuration = 40 // 释放后先安稳停下歇息 1.2 秒，平稳过渡
+        triggerSquashAndStretch()
+        try {
+            windowManager.updateViewLayout(this, layoutParams)
+        } catch (_: Exception) {}
+        invalidate()
+    }
 
-        if (layoutParams.y < targetY) {
-            motionState = PetMotionState.FALLING
-            dropAnimator?.cancel()
-            dropAnimator = ValueAnimator.ofInt(layoutParams.y, targetY).apply {
-                duration = 600
-                interpolator = BounceInterpolator() // 落地Q弹回跳效果
-                addUpdateListener { anim ->
-                    layoutParams.y = anim.animatedValue as Int
-                    try {
-                        windowManager.updateViewLayout(this@PetFloatingView, layoutParams)
-                    } catch (_: Exception) {}
-                }
-                addListener(object : AnimatorListenerAdapter() {
-                    override fun onAnimationEnd(animation: Animator) {
-                        motionState = PetMotionState.IDLE
-                        invalidate()
-                    }
-                })
-                start()
+    private fun triggerSquashAndStretch() {
+        val squashAnim = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 320
+            interpolator = OvershootInterpolator(2.5f)
+            addUpdateListener { anim ->
+                val f = anim.animatedFraction
+                val squashAmount = sin(f * Math.PI).toFloat() * 0.22f
+                scaleXFactor = 1.0f + squashAmount
+                scaleYFactor = 1.0f - squashAmount
+                invalidate()
             }
-        } else {
-            motionState = PetMotionState.IDLE
-            invalidate()
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    scaleXFactor = 1.0f
+                    scaleYFactor = 1.0f
+                    invalidate()
+                }
+            })
         }
+        squashAnim.start()
     }
 }

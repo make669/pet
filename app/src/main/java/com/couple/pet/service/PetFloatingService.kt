@@ -119,10 +119,10 @@ class PetFloatingService : Service() {
 
         val screenHeight = resources.displayMetrics.heightPixels
 
-        // 适度放大容器至 320x320，给顶部展开的即时快捷气泡菜单充足的绘制空间
+        // 紧凑轻量悬浮容器 200x200：小狗专属占位，不遮挡手机桌面其他应用点击
         val layoutParams = WindowManager.LayoutParams().apply {
-            width = 320
-            height = 320
+            width = 200
+            height = 200
             type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             } else {

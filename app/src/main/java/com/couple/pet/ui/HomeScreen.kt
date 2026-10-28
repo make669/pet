@@ -22,11 +22,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.couple.pet.network.PetSyncEngine
+import com.couple.pet.ui.theme.PetColors
 
 /**
- * 【主页】：对应手绘原型左侧主图
+ * 【主页】：依据手绘原型全新升级治愈系暖牛奶配色 (Warm Milk & Pastel Rose)
  * - 顶部汉堡菜单按钮「三」唤醒 5 个小圆圈功能抽屉
- * - 屏幕正中央巨大的【当前 pet 各个数值】大圆盘看板
+ * - 屏幕正中央巨大的【当前 pet 各个数值】精致大圆盘看板
  */
 @Composable
 fun HomeScreen(
@@ -38,7 +39,7 @@ fun HomeScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFFBF8F5))
+            .background(PetColors.Background)
             .padding(horizontal = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -55,20 +56,21 @@ fun HomeScreen(
                 modifier = Modifier
                     .size(46.dp)
                     .clip(CircleShape)
-                    .background(Color.White)
+                    .background(PetColors.Surface)
+                    .border(1.dp, PetColors.CardBorder, CircleShape)
             ) {
                 Icon(
                     imageVector = Icons.Default.Menu,
                     contentDescription = "打开功能菜单",
-                    tint = Color(0xFF263238)
+                    tint = PetColors.TextMain
                 )
             }
 
             Text(
-                text = "🐾 pet 主页",
+                text = "🐾 线条小狗伴侣",
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF263238)
+                color = PetColors.TextMain
             )
 
             // 右侧占位保持居中对称
@@ -77,73 +79,109 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.weight(0.12f))
 
-        // 2. 核心大圆盘：【当前 pet 各个数值】（完全还原手绘中央大圆）
+        // 2. 核心大圆盘：【当前 pet 各个数值】（精致双层渐变温润圆盘）
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
-                .size(310.dp)
+                .size(316.dp)
                 .clip(CircleShape)
                 .background(
                     Brush.radialGradient(
-                        colors = listOf(Color.White, Color(0xFFFFF9F0), Color(0xFFFFECE5))
+                        colors = listOf(
+                            Color.White,
+                            PetColors.SurfaceElevated,
+                            PetColors.PrimaryContainer
+                        )
                     )
                 )
-                .border(6.dp, Color(0xFFFFD5CD), CircleShape)
-                .padding(24.dp)
+                .border(4.dp, PetColors.PrimaryBorder, CircleShape)
+                .padding(20.dp)
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
                 modifier = Modifier.fillMaxSize()
             ) {
-                // 小狗头像与等级
-                Text(
-                    text = "🐶",
-                    fontSize = 58.sp,
-                    modifier = Modifier.padding(bottom = 2.dp)
-                )
+                // 小狗头像圆圈底座
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(76.dp)
+                        .clip(CircleShape)
+                        .background(Color.White)
+                        .border(2.dp, PetColors.PrimaryBorder, CircleShape)
+                ) {
+                    Text(
+                        text = "🐶",
+                        fontSize = 46.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
                 Text(
                     text = "线条小狗 · Lv.${petStats.level}",
                     fontWeight = FontWeight.Bold,
-                    fontSize = 17.sp,
-                    color = Color(0xFF263238)
-                )
-                Text(
-                    text = if (coupleProfile.isPaired) "💕 双人共同抚养中" else "🐾 单人陪伴中",
-                    fontSize = 11.sp,
-                    color = Color(0xFF78909C),
-                    modifier = Modifier.padding(top = 2.dp, bottom = 10.dp)
+                    fontSize = 18.sp,
+                    color = PetColors.TextMain
                 )
 
-                // 核心三大数值显示
-                CircularStatProgress("🍖 饱食度", petStats.hunger, Color(0xFFFF7043))
-                Spacer(modifier = Modifier.height(4.dp))
-                CircularStatProgress("❤️ 心情值", petStats.mood, Color(0xFFE91E63))
-                Spacer(modifier = Modifier.height(4.dp))
-                CircularStatProgress("🛁 清洁度", petStats.clean, Color(0xFF29B6F6))
+                // 抚养状态气泡胶囊
+                Box(
+                    modifier = Modifier
+                        .padding(top = 4.dp, bottom = 12.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(PetColors.PrimaryContainer)
+                        .padding(horizontal = 10.dp, vertical = 3.dp)
+                ) {
+                    Text(
+                        text = if (coupleProfile.isPaired) "💕 双人共同抚养中" else "🐾 单人暖心陪伴中",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = PetColors.Primary
+                    )
+                }
+
+                // 核心三大数值显示（马卡龙治愈色阶）
+                CircularStatProgress("🍖 饱食度", petStats.hunger, PetColors.Hunger, PetColors.HungerTrack)
+                Spacer(modifier = Modifier.height(6.dp))
+                CircularStatProgress("❤️ 心情值", petStats.mood, PetColors.Mood, PetColors.MoodTrack)
+                Spacer(modifier = Modifier.height(6.dp))
+                CircularStatProgress("🛁 清洁度", petStats.clean, PetColors.Clean, PetColors.CleanTrack)
             }
         }
 
         Spacer(modifier = Modifier.weight(0.2f))
 
-        // 底部提示
+        // 3. 底部提示卡片（圆角精致温和）
         Card(
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = PetColors.Surface),
+            border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(PetColors.CardBorder, PetColors.CardBorder))),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 24.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(14.dp)
+                modifier = Modifier.padding(16.dp)
             ) {
-                Text(text = "💡", fontSize = 20.sp)
-                Spacer(modifier = Modifier.width(10.dp))
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(PetColors.PrimaryContainer)
+                ) {
+                    Text(text = "💡", fontSize = 18.sp)
+                }
+                Spacer(modifier = Modifier.width(12.dp))
                 Text(
-                    text = "点击左上角「三」菜单，可快速唤醒桌面小狗、进行投喂或绑定情侣！",
-                    fontSize = 12.sp,
-                    color = Color(0xFF546E7A)
+                    text = "点击左上角「三」快捷魔盒，随时唤醒桌面小狗、进行投喂洗澡或配对情侣！",
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    color = PetColors.TextSub
                 )
             }
         }
@@ -151,30 +189,40 @@ fun HomeScreen(
 }
 
 @Composable
-private fun CircularStatProgress(label: String, value: Int, color: Color) {
+private fun CircularStatProgress(
+    label: String,
+    value: Int,
+    progressColor: Color,
+    trackColor: Color
+) {
     val progress by animateFloatAsState(targetValue = value / 100f, label = "progress")
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
         modifier = Modifier
-            .fillMaxWidth(0.85f)
-            .padding(vertical = 2.dp)
+            .fillMaxWidth(0.88f)
+            .padding(vertical = 1.dp)
     ) {
-        Text(text = label, fontSize = 12.sp, color = Color(0xFF455A64))
+        Text(
+            text = label,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            color = PetColors.TextMain
+        )
         LinearProgressIndicator(
             progress = { progress },
-            color = color,
-            trackColor = Color(0xFFEEEEEE),
+            color = progressColor,
+            trackColor = trackColor,
             modifier = Modifier
-                .width(110.dp)
-                .height(7.dp)
+                .width(115.dp)
+                .height(8.dp)
                 .clip(RoundedCornerShape(4.dp))
         )
         Text(
             text = "$value%",
             fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = Color(0xFF263238),
+            fontWeight = FontWeight.Bold,
+            color = PetColors.TextMain,
             modifier = Modifier.width(36.dp),
             textAlign = TextAlign.End
         )

@@ -92,6 +92,16 @@ fun PetAppRoot(
     var isPetFloating by remember { mutableStateOf(false) }
     var showPairDialog by remember { mutableStateOf(false) }
 
+    fun toggleFloatingPet() {
+        if (isPetFloating) {
+            onStopPet()
+            isPetFloating = false
+        } else {
+            onStartPet()
+            isPetFloating = true
+        }
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -116,13 +126,7 @@ fun PetAppRoot(
 
                 // 5 个功能小圆圈按钮列表（手绘原型 [O O O O O]）
                 DrawerCircleActionRow("🐾", if (isPetFloating) "收起桌宠" else "唤醒桌宠", PetColors.DrawerPet) {
-                    if (isPetFloating) {
-                        onStopPet()
-                        isPetFloating = false
-                    } else {
-                        onStartPet()
-                        isPetFloating = true
-                    }
+                    toggleFloatingPet()
                     coroutineScope.launch { drawerState.close() }
                 }
 
@@ -198,7 +202,11 @@ fun PetAppRoot(
         ) { paddingValues ->
             Box(modifier = Modifier.padding(paddingValues)) {
                 when (selectedTab) {
-                    0 -> HomeScreen(onOpenDrawer = { coroutineScope.launch { drawerState.open() } })
+                    0 -> HomeScreen(
+                        onOpenDrawer = { coroutineScope.launch { drawerState.open() } },
+                        isPetFloating = isPetFloating,
+                        onToggleFloatingPet = { toggleFloatingPet() }
+                    )
                     1 -> ShopScreen()
                     2 -> ProfileScreen()
                 }

@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">pet</string>
+    <string name="channel_name">pet桌面宠物常驻通知</string>
+    <string name="channel_desc">保持pet在桌面常驻并实时同步状态</string>
+</resources>

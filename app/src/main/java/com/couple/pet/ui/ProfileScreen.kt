@@ -8,6 +8,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,6 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import kotlinx.coroutines.launch
 import com.couple.pet.network.PetSyncEngine
 import com.couple.pet.pet.BasePet
 import com.couple.pet.pet.DoodleCatPet
@@ -63,6 +66,7 @@ fun ProfileScreen(
     val activePet by PetRegistry.activePet.collectAsState()
     val deskNote by PetSyncEngine.deskNote.collectAsState()
 
+    val coroutineScope = rememberCoroutineScope()
     var showEditNicknameDialog by remember { mutableStateOf(false) }
     var showDeskNoteDialog by remember { mutableStateOf(false) }
     var showCalendarDialog by remember { mutableStateOf(false) }
@@ -280,7 +284,6 @@ fun ProfileScreen(
     if (showEditNicknameDialog) {
         var myNameInput by remember { mutableStateOf(coupleProfile.myNickname) }
         var partnerNameInput by remember { mutableStateOf(coupleProfile.partnerNickname) }
-        var daysInput by remember { mutableStateOf(coupleProfile.daysTogether.toString()) }
         var isPairedState by remember { mutableStateOf(coupleProfile.isPaired) }
 
         Dialog(onDismissRequest = { showEditNicknameDialog = false }) {
@@ -333,20 +336,27 @@ fun ProfileScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    OutlinedTextField(
-                        value = daysInput,
-                        onValueChange = { daysInput = it.filter { char -> char.isDigit() } },
-                        label = { Text("相伴天数") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(16.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = PetColors.Primary,
-                            unfocusedBorderColor = PetColors.CardBorder
-                        ),
+                    // 系统自动计算天数提示
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = PetColors.SurfaceVariant.copy(alpha = 0.45f),
                         modifier = Modifier.fillMaxWidth()
-                    )
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Text("🗓️", fontSize = 14.sp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "相伴天数：系统自动计时，当前第 ${coupleProfile.daysTogether} 天",
+                                fontSize = 11.5.sp,
+                                color = PetColors.TextSub
+                            )
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(14.dp))
 
@@ -383,7 +393,6 @@ fun ProfileScreen(
                         Button(
                             onClick = {
                                 PetSyncEngine.updateNicknames(myNameInput, partnerNameInput)
-                                daysInput.toIntOrNull()?.let { PetSyncEngine.updateDaysTogether(it) }
                                 if (isPairedState != coupleProfile.isPaired) {
                                     if (isPairedState) {
                                         PetSyncEngine.pairWithCode("PET-520")
@@ -514,7 +523,7 @@ fun ProfileScreen(
         }
     }
 
-    // 3. 纪念日历 / 倒数日与时光轴弹窗
+    // 3. 纪念日历 / 倒数日与时光轴弹窗 (一体化卡片，下方回忆录横向滑动，告别过长占屏)
     if (showCalendarDialog) {
         Dialog(onDismissRequest = { showCalendarDialog = false }) {
             Surface(
@@ -523,14 +532,15 @@ fun ProfileScreen(
                 border = androidx.compose.foundation.BorderStroke(1.dp, PetColors.CardBorder),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp)
+                    .wrapContentHeight()
+                    .padding(horizontal = 16.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(20.dp)
-                        .verticalScroll(rememberScrollState())
+                        .padding(18.dp)
                 ) {
+                    // 头部标题 + 关闭按钮 (一体化呈现，不分成两页)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -539,13 +549,13 @@ fun ProfileScreen(
                         Column {
                             Text(
                                 text = "📅 纪念日历 · 倒数日",
-                                fontSize = 18.sp,
+                                fontSize = 17.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = PetColors.TextMain
                             )
                             Text(
-                                text = "相伴时光轴与仪式感日历",
-                                fontSize = 11.5.sp,
+                                text = "相伴时光轴与仪式感打卡",
+                                fontSize = 11.sp,
                                 color = PetColors.TextSub
                             )
                         }
@@ -554,114 +564,142 @@ fun ProfileScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    // 倒数日横幅卡片
+                    // 1. 倒数日横幅卡片
                     Surface(
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(14.dp),
                         color = PetColors.PrimaryContainer,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                                .padding(horizontal = 14.dp, vertical = 9.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column {
                                 Text(
                                     text = if (coupleProfile.isPaired) "🎉 距离相恋 200 天纪念日" else "🎉 距离领养 100 天纪念日",
-                                    fontSize = 12.sp,
+                                    fontSize = 11.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = PetColors.TextMain
                                 )
                                 Text(
                                     text = "下一个重要仪式，小宠会戴上小礼帽哦",
-                                    fontSize = 10.5.sp,
+                                    fontSize = 9.5.sp,
                                     color = PetColors.TextSub
                                 )
                             }
                             Text(
                                 text = "还剩 24 天",
-                                fontSize = 15.sp,
+                                fontSize = 13.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = PetColors.Primary
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    // 日历简易示意网格 (本月打卡)
-                    Text("🗓️ 2026 年 10 月", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PetColors.TextMain)
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    val weekdays = listOf("日", "一", "二", "三", "四", "五", "六")
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        weekdays.forEach { w ->
-                            Text(w, fontSize = 11.sp, color = PetColors.TextMuted, textAlign = TextAlign.Center, modifier = Modifier.width(32.dp))
+                    // 2. 当月打卡日历示意
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("🗓️ 2026 年 10 月", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PetColors.TextMain)
+                            Text("✨ 已打卡相伴 7 天", fontSize = 10.sp, color = PetColors.Primary)
                         }
-                    }
+                        Spacer(modifier = Modifier.height(6.dp))
 
-                    Spacer(modifier = Modifier.height(6.dp))
+                        val weekdays = listOf("日", "一", "二", "三", "四", "五", "六")
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            weekdays.forEach { w ->
+                                Text(w, fontSize = 10.5.sp, color = PetColors.TextMuted, textAlign = TextAlign.Center, modifier = Modifier.width(32.dp))
+                            }
+                        }
 
-                    // 日历示例打卡日期
-                    val daysSample = (25..31).toList()
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        daysSample.forEach { day ->
-                            val isToday = day == 29
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(if (isToday) PetColors.Primary else PetColors.SurfaceVariant.copy(alpha = 0.4f))
-                            ) {
-                                Text(
-                                    text = if (isToday) "今" else day.toString(),
-                                    fontSize = 11.sp,
-                                    fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (isToday) Color.White else PetColors.TextMain
-                                )
+                        Spacer(modifier = Modifier.height(5.dp))
+
+                        val daysSample = (25..31).toList()
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            daysSample.forEach { day ->
+                                val isToday = day == 29
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier
+                                        .size(30.dp)
+                                        .clip(CircleShape)
+                                        .background(if (isToday) PetColors.Primary else PetColors.SurfaceVariant.copy(alpha = 0.4f))
+                                ) {
+                                    Text(
+                                        text = if (isToday) "今" else day.toString(),
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isToday) Color.White else PetColors.TextMain
+                                    )
+                                }
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(18.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
-                    // 时光里程碑手账
-                    Text("📜 成长相伴回忆录：", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PetColors.TextMain)
-                    Spacer(modifier = Modifier.height(8.dp))
+                    // 3. 成长相伴时光轴（横向滑动卡片 LazyRow，一体化且不占高！）
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("📜 成长相伴时光卡：", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PetColors.TextMain)
+                        Text("👉 左右滑动查看", fontSize = 10.sp, color = PetColors.TextMuted)
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
 
                     val milestones = listOf(
                         Triple("🌱 第 1 天", "迎来了属于我们的小小生命【${activePet.speciesName}】", "🏠"),
-                        Triple("🐟 第 7 天", "第一次喂它吃美味的小鱼干，小家伙开心地转圈圈", "✨"),
+                        Triple("🐟 第 7 天", "第一次喂它吃美味的小鱼干，开心地转圈圈", "✨"),
                         Triple("💕 第 30 天", if (coupleProfile.isPaired) "双人情侣成功绑定，开始共同喂养" else "小家伙已经完全熟悉小窝，开始呼呼大睡", "❤️"),
                         Triple("👑 第 50 天", "小宠成长升阶！解锁了专属绝活【${activePet.getSpecialTrickName()}】", "🐾"),
                         Triple("🌟 第 ${coupleProfile.daysTogether} 天", "今天也充满爱意，一起继续温馨相伴吧~", "🎉")
                     )
 
-                    milestones.forEach { (time, desc, emoji) ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                contentAlignment = Alignment.Center,
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(milestones.size) { i ->
+                            val (time, desc, emoji) = milestones[i]
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = PetColors.SurfaceVariant.copy(alpha = 0.5f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, PetColors.CardBorder),
                                 modifier = Modifier
-                                    .size(30.dp)
-                                    .clip(CircleShape)
-                                    .background(PetColors.PrimaryContainer)
+                                    .width(180.dp)
+                                    .height(82.dp)
                             ) {
-                                Text(emoji, fontSize = 14.sp)
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(time, fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = PetColors.Primary)
-                                Text(desc, fontSize = 12.sp, color = PetColors.TextMain)
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(emoji, fontSize = 13.sp)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(time, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PetColors.Primary)
+                                    }
+                                    Text(
+                                        text = desc,
+                                        fontSize = 10.5.sp,
+                                        color = PetColors.TextMain,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
                             }
                         }
                     }

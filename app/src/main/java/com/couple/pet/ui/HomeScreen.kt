@@ -62,6 +62,7 @@ fun HomeScreen(
     var feedTrigger by remember { mutableLongStateOf(0L) }
     var lastFedFoodName by remember { mutableStateOf("") }
     var showCustomizeDialog by remember { mutableStateOf(false) }
+    var showTracksDialog by remember { mutableStateOf(false) }
 
     val coroutineScope = rememberCoroutineScope()
 
@@ -74,59 +75,91 @@ fun HomeScreen(
         }
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(PetColors.Background)
-            .padding(horizontal = 20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // ================= 顶部操作与品牌栏 =================
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
+        // 24 种动物手印足迹温暖印染底纹
+        AnimalFootprintsBackground(
+            modifier = Modifier.fillMaxSize(),
+            alpha = 0.12f
+        )
+
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 16.dp, bottom = 10.dp)
+                .fillMaxSize()
+                .padding(horizontal = 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            IconButton(
-                onClick = onOpenDrawer,
+            // ================= 顶部操作与品牌栏 =================
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier
-                    .size(42.dp)
-                    .clip(CircleShape)
-                    .background(PetColors.Surface)
-                    .border(1.dp, PetColors.CardBorder, CircleShape)
+                    .fillMaxWidth()
+                    .padding(top = 16.dp, bottom = 10.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Menu,
-                    contentDescription = "打开功能菜单",
-                    tint = PetColors.TextMain,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
+                IconButton(
+                    onClick = onOpenDrawer,
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(PetColors.Surface)
+                        .border(1.dp, PetColors.CardBorder, CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Menu,
+                        contentDescription = "打开功能菜单",
+                        tint = PetColors.TextMain,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
 
-            Text(
-                text = "🐾 ${activePet.speciesName}伴侣",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = PetColors.TextMain
-            )
-
-            // 陪伴状态胶囊
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(PetColors.PrimaryContainer)
-                    .padding(horizontal = 10.dp, vertical = 5.dp)
-            ) {
                 Text(
-                    text = if (coupleProfile.isPaired) "💕 双人" else "🐾 单人",
-                    fontSize = 11.5.sp,
+                    text = "🐾 ${activePet.speciesName}伴侣",
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = PetColors.Primary
+                    color = PetColors.TextMain
                 )
+
+                // 顶部右侧：24种足迹图鉴按钮 + 陪伴状态胶囊
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = PetColors.SurfaceVariant.copy(alpha = 0.7f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, PetColors.CardBorder),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { showTracksDialog = true }
+                    ) {
+                        Text(
+                            text = "🐾 24种足迹",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = PetColors.TextMain,
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(PetColors.PrimaryContainer)
+                            .padding(horizontal = 9.dp, vertical = 5.dp)
+                    ) {
+                        Text(
+                            text = if (coupleProfile.isPaired) "💕 双人" else "🐾 单人",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PetColors.Primary
+                        )
+                    }
+                }
             }
-        }
 
         Spacer(modifier = Modifier.height(6.dp))
 
@@ -410,7 +443,8 @@ fun HomeScreen(
                 }
             }
         }
-    }
+    } // 闭合 Column
+    } // 闭合底纹 Box
 
     // ================= 自定义投喂托盘配置弹窗 =================
     if (showCustomizeDialog) {
@@ -437,6 +471,107 @@ fun HomeScreen(
                 showToast("已恢复默认食物餐盘")
             }
         )
+    }
+
+    // ================= 24 种动物足印图鉴弹窗 =================
+    if (showTracksDialog) {
+        AnimalTracksEncyclopediaDialog(onDismiss = { showTracksDialog = false })
+    }
+}
+
+/**
+ * 24 种动物足印图鉴弹窗
+ */
+@Composable
+private fun AnimalTracksEncyclopediaDialog(onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = PetColors.Surface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, PetColors.CardBorder),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 560.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "🐾 24种动物足印图鉴",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PetColors.TextMain
+                        )
+                        Text(
+                            text = "背景印染的萌宠与飞禽走兽手印一览",
+                            fontSize = 11.sp,
+                            color = PetColors.TextSub
+                        )
+                    }
+
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "关闭",
+                            tint = PetColors.TextSub,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    AnimalFootprintLibrary.TRACKS.chunked(3).forEach { rowTracks ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            rowTracks.forEach { track ->
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = PetColors.SurfaceVariant.copy(alpha = 0.45f),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, PetColors.CardBorder),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        modifier = Modifier.padding(vertical = 10.dp)
+                                    ) {
+                                        Text(text = track.emoji, fontSize = 22.sp)
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = track.name,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = PetColors.TextMain
+                                        )
+                                    }
+                                }
+                            }
+                            if (rowTracks.size < 3) {
+                                for (k in 0 until (3 - rowTracks.size)) {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

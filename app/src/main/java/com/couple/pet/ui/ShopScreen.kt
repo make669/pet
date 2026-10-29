@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.couple.pet.network.PetSyncEngine
+import com.couple.pet.pet.PetRegistry
 import com.couple.pet.ui.theme.PetColors
 
 data class ShopItem(
@@ -41,6 +42,7 @@ fun ShopScreen() {
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("全部") }
     val categories = listOf("全部", "pet", "食物", "装扮", "道具")
+    val activePet by PetRegistry.activePet.collectAsState()
 
     val allItems = remember {
         listOf(
@@ -48,10 +50,10 @@ fun ShopScreen() {
             ShopItem("2", "豪华牛肉罐头", "食物", "🍖", "饱食度 +45，经验 +15", 25) { PetSyncEngine.feed(45) },
             ShopItem("3", "甜心甜甜圈", "食物", "🍩", "心情值 +30，情侣甜蜜分享", 15) { PetSyncEngine.poke() },
             ShopItem("4", "泡泡沐浴露", "道具", "🧼", "清洁度直接拉满 100", 20) { PetSyncEngine.bath() },
-            ShopItem("5", "经典线条小狗", "pet", "🐶", "当前正在陪伴的呆萌小白狗", 0) {},
-            ShopItem("6", "憨厚小柴犬", "pet", "🐕", "元气满满的忠诚柴柴", 100) {},
-            ShopItem("7", "软萌垂耳兔", "pet", "🐰", "耳朵软软的胆小小兔", 120) {},
-            ShopItem("8", "绅士红色领结", "装扮", "🎀", "系在小狗胸前，可爱度翻倍", 30) {},
+            ShopItem("5", "经典线条小狗", "pet", "🐶", "黑白治愈系萌萌小白狗", 0) { PetRegistry.switchPet("doodle_dog") },
+            ShopItem("6", "软萌线条奶猫", "pet", "🐱", "傲娇揣手手的黑白线条奶猫", 0) { PetRegistry.switchPet("doodle_cat") },
+            ShopItem("7", "软萌垂耳小兔", "pet", "🐰", "软糯长垂耳黑白线条兔兔", 0) { PetRegistry.switchPet("doodle_rabbit") },
+            ShopItem("8", "绅士红色领结", "装扮", "🎀", "系在宠物胸前，可爱度翻倍", 30) {},
             ShopItem("9", "夏日小草帽", "装扮", "👒", "遮阳出游必备，悠闲度日", 35) {},
             ShopItem("10", "小恐龙背包", "装扮", "🎒", "背在身后，像要去上幼儿园", 50) {}
         )
@@ -146,6 +148,7 @@ fun ShopScreen() {
 
 @Composable
 fun ShopItemCard(item: ShopItem) {
+    val activePet by PetRegistry.activePet.collectAsState()
     val categoryBg = when (item.category) {
         "食物" -> PetColors.DrawerFeed
         "装扮" -> PetColors.DrawerPoke
@@ -226,19 +229,37 @@ fun ShopItemCard(item: ShopItem) {
             }
 
             // 右侧：兑换/使用按钮
+            val isCurrentPet = item.category == "pet" && activePet.speciesEmoji == item.iconEmoji
+            val isPetCategory = item.category == "pet"
+
             Button(
                 onClick = item.onBuy,
                 shape = RoundedCornerShape(18.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (item.price == 0) PetColors.SurfaceVariant else PetColors.Primary
+                    containerColor = when {
+                        isCurrentPet -> PetColors.PrimaryContainer
+                        isPetCategory -> PetColors.Primary
+                        item.price == 0 -> PetColors.SurfaceVariant
+                        else -> PetColors.Primary
+                    }
                 ),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
             ) {
                 Text(
-                    text = if (item.price == 0) "已穿戴" else "购买",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = if (item.price == 0) PetColors.TextSub else Color.White
+                    text = when {
+                        isCurrentPet -> "🐾 陪伴中"
+                        isPetCategory -> "✨ 切换陪伴"
+                        item.price == 0 -> "已拥有"
+                        else -> "购买"
+                    },
+                    fontSize = 12.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = when {
+                        isCurrentPet -> PetColors.Primary
+                        isPetCategory -> Color.White
+                        item.price == 0 -> PetColors.TextSub
+                        else -> Color.White
+                    }
                 )
             }
         }

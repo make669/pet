@@ -36,6 +36,7 @@ import androidx.compose.ui.window.Dialog
 import com.couple.pet.model.CustomFoodItem
 import com.couple.pet.model.PetFoodManager
 import com.couple.pet.network.PetSyncEngine
+import com.couple.pet.pet.PetRegistry
 import com.couple.pet.ui.theme.PetColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -55,11 +56,13 @@ fun HomeScreen(
     val petStats by PetSyncEngine.petStats.collectAsState()
     val coupleProfile by PetSyncEngine.coupleProfile.collectAsState()
     val activeSlots by PetFoodManager.activeSlots.collectAsState()
+    val activePet by PetRegistry.activePet.collectAsState()
 
     var feedbackTip by remember { mutableStateOf<String?>(null) }
     var feedTrigger by remember { mutableLongStateOf(0L) }
     var lastFedFoodName by remember { mutableStateOf("") }
     var showCustomizeDialog by remember { mutableStateOf(false) }
+    var showTracksDialog by remember { mutableStateOf(false) }
 
     val coroutineScope = rememberCoroutineScope()
 
@@ -72,59 +75,91 @@ fun HomeScreen(
         }
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(PetColors.Background)
-            .padding(horizontal = 20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // ================= 顶部操作与品牌栏 =================
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
+        // 24 种动物手印足迹温暖印染底纹 (大幅提高清晰度与对比度，清晰立现)
+        AnimalFootprintsBackground(
+            modifier = Modifier.fillMaxSize(),
+            alpha = 0.45f
+        )
+
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 16.dp, bottom = 10.dp)
+                .fillMaxSize()
+                .padding(horizontal = 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            IconButton(
-                onClick = onOpenDrawer,
+            // ================= 顶部操作与品牌栏 =================
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier
-                    .size(42.dp)
-                    .clip(CircleShape)
-                    .background(PetColors.Surface)
-                    .border(1.dp, PetColors.CardBorder, CircleShape)
+                    .fillMaxWidth()
+                    .padding(top = 16.dp, bottom = 10.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Menu,
-                    contentDescription = "打开功能菜单",
-                    tint = PetColors.TextMain,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
+                IconButton(
+                    onClick = onOpenDrawer,
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(PetColors.Surface)
+                        .border(1.dp, PetColors.CardBorder, CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Menu,
+                        contentDescription = "打开功能菜单",
+                        tint = PetColors.TextMain,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
 
-            Text(
-                text = "🐾 线条小狗伴侣",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = PetColors.TextMain
-            )
-
-            // 陪伴状态胶囊
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(PetColors.PrimaryContainer)
-                    .padding(horizontal = 10.dp, vertical = 5.dp)
-            ) {
                 Text(
-                    text = if (coupleProfile.isPaired) "💕 双人" else "🐾 单人",
-                    fontSize = 11.5.sp,
+                    text = "🐾 ${activePet.speciesName}伴侣",
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = PetColors.Primary
+                    color = PetColors.TextMain
                 )
+
+                // 顶部右侧：24种足迹图鉴按钮 + 陪伴状态胶囊
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = PetColors.SurfaceVariant.copy(alpha = 0.7f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, PetColors.CardBorder),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { showTracksDialog = true }
+                    ) {
+                        Text(
+                            text = "🐾 24种足迹",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = PetColors.TextMain,
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(PetColors.PrimaryContainer)
+                            .padding(horizontal = 9.dp, vertical = 5.dp)
+                    ) {
+                        Text(
+                            text = if (coupleProfile.isPaired) "💕 双人" else "🐾 单人",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PetColors.Primary
+                        )
+                    }
+                }
             }
-        }
 
         Spacer(modifier = Modifier.height(6.dp))
 
@@ -142,7 +177,7 @@ fun HomeScreen(
                 PolaroidPuppyViewport(
                     isPetFloating = isPetFloating,
                     onPetTouched = {
-                        showToast("小狗开心地蹭了蹭你的手掌 ❤️")
+                        // 触碰反馈直接呈现在相框宠物头顶的心声气泡中，不再弹出底部黑条
                     },
                     feedTrigger = feedTrigger,
                     fedFoodName = lastFedFoodName,
@@ -174,7 +209,7 @@ fun HomeScreen(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = if (isPetFloating) "线条小狗 · 桌面漫步中" else "线条小狗 · 相框小憩中",
+                            text = "${activePet.speciesName} · " + if (isPetFloating) "桌面漫步中" else "相框小憩中",
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                             color = PetColors.TextMain
@@ -195,20 +230,18 @@ fun HomeScreen(
                         }
                     }
 
-                    // 桌面漫步切换按钮 (精巧药丸胶囊)
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = if (isPetFloating) PetColors.PrimaryContainer else PetColors.Primary,
+                    // 右侧轻柔状态标签
+                    Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(14.dp))
-                            .clickable { onToggleFloatingPet() }
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isPetFloating) PetColors.PrimaryContainer else PetColors.SurfaceVariant.copy(alpha = 0.6f))
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
                         Text(
-                            text = if (isPetFloating) "🐾 叫回相框" else "🐾 放桌面漫步",
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isPetFloating) PetColors.Primary else Color.White,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            text = if (isPetFloating) "桌面漫步中" else "相框小憩中",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (isPetFloating) PetColors.Primary else PetColors.TextSub
                         )
                     }
                 }
@@ -346,7 +379,7 @@ fun HomeScreen(
                                 )
                                 lastFedFoodName = foodItem.name
                                 feedTrigger++
-                                showToast("投喂了【${foodItem.name}】！${foodItem.buffDescription} 😋")
+                                // 彻底移除底部悬浮黑条，反馈 100% 呈现在相框宠物头顶的心声气泡中
                             },
                             onLongClick = {
                                 showCustomizeDialog = true
@@ -357,32 +390,37 @@ fun HomeScreen(
             }
         }
 
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.weight(0.45f))
 
-        // 浮动交互即时反馈条
-        AnimatedVisibility(
-            visible = feedbackTip != null,
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier.padding(bottom = 12.dp)
+        // ================= 核心操作：放桌面漫步 / 叫回相框 切换大按钮 (位于下方空白区域，大小比例优雅舒展) =================
+        Button(
+            onClick = onToggleFloatingPet,
+            shape = RoundedCornerShape(25.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (isPetFloating) PetColors.PrimaryContainer else PetColors.Primary
+            ),
+            elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp, pressedElevation = 4.dp),
+            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 13.dp),
+            modifier = Modifier
+                .fillMaxWidth(0.82f)
+                .height(50.dp)
         ) {
-            feedbackTip?.let { tip ->
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(PetColors.TextMain.copy(alpha = 0.88f))
-                        .padding(horizontal = 16.dp, vertical = 7.dp)
-                ) {
-                    Text(
-                        text = tip,
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = if (isPetFloating) "🐾 叫${activePet.defaultNick}回相框" else "🐾 放桌面漫步",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isPetFloating) PetColors.Primary else Color.White
+                )
             }
         }
-    }
+
+        Spacer(modifier = Modifier.weight(0.55f))
+    } // 闭合 Column
+    } // 闭合底纹 Box
 
     // ================= 自定义投喂托盘配置弹窗 =================
     if (showCustomizeDialog) {
@@ -409,6 +447,107 @@ fun HomeScreen(
                 showToast("已恢复默认食物餐盘")
             }
         )
+    }
+
+    // ================= 24 种动物足印图鉴弹窗 =================
+    if (showTracksDialog) {
+        AnimalTracksEncyclopediaDialog(onDismiss = { showTracksDialog = false })
+    }
+}
+
+/**
+ * 24 种动物足印图鉴弹窗
+ */
+@Composable
+private fun AnimalTracksEncyclopediaDialog(onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = PetColors.Surface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, PetColors.CardBorder),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 560.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "🐾 24种动物足印图鉴",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PetColors.TextMain
+                        )
+                        Text(
+                            text = "背景印染的萌宠与飞禽走兽手印一览",
+                            fontSize = 11.sp,
+                            color = PetColors.TextSub
+                        )
+                    }
+
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "关闭",
+                            tint = PetColors.TextSub,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    AnimalFootprintLibrary.TRACKS.chunked(3).forEach { rowTracks ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            rowTracks.forEach { track ->
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = PetColors.SurfaceVariant.copy(alpha = 0.45f),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, PetColors.CardBorder),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        modifier = Modifier.padding(vertical = 10.dp)
+                                    ) {
+                                        Text(text = track.emoji, fontSize = 22.sp)
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = track.name,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = PetColors.TextMain
+                                        )
+                                    }
+                                }
+                            }
+                            if (rowTracks.size < 3) {
+                                for (k in 0 until (3 - rowTracks.size)) {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

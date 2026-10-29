@@ -1,11 +1,8 @@
 package com.couple.pet.ui
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,7 +13,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -29,9 +25,10 @@ import kotlinx.coroutines.launch
 
 /**
  * 【主页】：方案 2 · 极简拍立得画框风 (Minimalist Polaroid Canvas)
- * - 视觉中心：一张大尺寸温润拍立得白卡，线条小狗在相框中灵动互动
- * - 细节留白：拍立得手写签名、实时状态寄语与精细马卡龙胶囊条
- * - 底部操控：双核极简圆角按钮 [ 🦴 快速投喂 ] 与 [ 🐾 桌宠漫步 ]，简洁大方
+ * 深度实现“全手机生命唯一守恒（One Living Puppy）”：
+ * 1. 小狗未放桌面时：小狗在相框中自主慢步漫步、碰壁转身、歪头嗅嗅；
+ * 2. 小狗放桌面后：小狗跃出相框去屏幕漫步，相框内留守空垫子与外出脚印；
+ * 3. 叫回小狗后：小狗快乐钻回相框继续漫步。
  */
 @Composable
 fun HomeScreen(
@@ -42,16 +39,8 @@ fun HomeScreen(
     val petStats by PetSyncEngine.petStats.collectAsState()
     val coupleProfile by PetSyncEngine.coupleProfile.collectAsState()
 
-    var petBounce by remember { mutableStateOf(false) }
-    var showHeart by remember { mutableStateOf(false) }
     var feedbackTip by remember { mutableStateOf<String?>(null) }
     val coroutineScope = rememberCoroutineScope()
-
-    val scaleAnim by animateFloatAsState(
-        targetValue = if (petBounce) 1.16f else 1.0f,
-        animationSpec = spring(dampingRatio = 0.45f, stiffness = 600f),
-        label = "polaroidBounce"
-    )
 
     Column(
         modifier = Modifier
@@ -124,90 +113,17 @@ fun HomeScreen(
                     .fillMaxWidth()
                     .padding(18.dp)
             ) {
-                // 拍立得照片视窗 (Photo Viewport)
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(250.dp)
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(Color(0xFFFAF7F2)) // 柔和温润相纸底色
-                        .border(1.dp, Color(0xFFF0EAE1), RoundedCornerShape(18.dp))
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) {
-                            PetSyncEngine.poke()
-                            petBounce = true
-                            showHeart = true
-                            feedbackTip = "小狗开心地蹭了蹭你的手掌 ❤️"
-                            coroutineScope.launch {
-                                delay(250)
-                                petBounce = false
-                                delay(1600)
-                                showHeart = false
-                                feedbackTip = null
-                            }
-                        }
-                ) {
-                    // 相片右上角：天气心境小标签
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(12.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color.White.copy(alpha = 0.85f))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = "☀️ 阳光正好",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = PetColors.TextSub
-                        )
-                    }
-
-                    // 拍立得相框中的线条小狗主角
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.scale(scaleAnim)
-                    ) {
-                        Text(
-                            text = "🐶",
-                            fontSize = 76.sp
-                        )
-                    }
-
-                    // 飘动的爱心动效
-                    if (showHeart) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.Center)
-                                .offset(y = (-55).dp)
-                        ) {
-                            Text(text = "❤️ ✨", fontSize = 28.sp)
+                // 拍立得照片视窗 (集成了相框自主游荡与外出留守逻辑)
+                PolaroidPuppyViewport(
+                    isPetFloating = isPetFloating,
+                    onPetTouched = {
+                        feedbackTip = "小狗开心地蹭了蹭你的手掌 ❤️"
+                        coroutineScope.launch {
+                            delay(1800)
+                            feedbackTip = null
                         }
                     }
-
-                    // 互动气泡提示条
-                    if (feedbackTip != null) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .padding(bottom = 14.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(PetColors.TextMain.copy(alpha = 0.85f))
-                            .padding(horizontal = 12.dp, vertical = 5.dp)
-                        ) {
-                            Text(
-                                text = feedbackTip!!,
-                                color = Color.White,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
-                }
+                )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -218,7 +134,7 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "线条小狗 · 温暖陪伴中",
+                        text = if (isPetFloating) "线条小狗 · 桌面探险中" else "线条小狗 · 相框小憩中",
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         color = PetColors.TextMain
@@ -240,7 +156,11 @@ fun HomeScreen(
                 }
 
                 Text(
-                    text = "“今天也是元气满满的一天，记得按时吃饱饱哦～”",
+                    text = if (isPetFloating) {
+                        "“小狗正在手机桌面上巡逻玩耍，随时可叫它回家哦～”"
+                    } else {
+                        "“在拍立得小房间里悠闲漫步，随时可以带它去桌面玩耍~”"
+                    },
                     fontSize = 12.sp,
                     color = PetColors.TextSub,
                     modifier = Modifier.padding(top = 4.dp, bottom = 14.dp)
@@ -257,6 +177,24 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.weight(0.12f))
 
+        // 临时反馈浮条
+        if (feedbackTip != null) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(PetColors.TextMain.copy(alpha = 0.85f))
+                    .padding(horizontal = 14.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = feedbackTip!!,
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+        }
+
         // ================= 3. 底部两大核心操作按钮 (简洁、大方) =================
         Row(
             modifier = Modifier
@@ -268,12 +206,9 @@ fun HomeScreen(
             Button(
                 onClick = {
                     PetSyncEngine.feed(15)
-                    petBounce = true
-                    feedbackTip = "投喂美味小鱼干，饱食度 +15 🐟"
+                    feedbackTip = if (isPetFloating) "隔空投喂！桌面小狗吃到了小鱼干 🐟" else "投喂美味小鱼干，饱食度 +15 🐟"
                     coroutineScope.launch {
-                        delay(250)
-                        petBounce = false
-                        delay(1600)
+                        delay(1800)
                         feedbackTip = null
                     }
                 },
@@ -290,18 +225,18 @@ fun HomeScreen(
                 )
             }
 
-            // 按钮 2：桌宠漫步开关
+            // 按钮 2：桌宠漫步开关 (生命唯一性联动)
             Button(
                 onClick = onToggleFloatingPet,
                 shape = RoundedCornerShape(18.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isPetFloating) PetColors.SurfaceVariant else PetColors.Primary
+                    containerColor = if (isPetFloating) PetColors.DrawerPet else PetColors.Primary
                 ),
                 contentPadding = PaddingValues(vertical = 15.dp),
                 modifier = Modifier.weight(1f)
             ) {
                 Text(
-                    text = if (isPetFloating) "🐾 收起桌宠" else "🐾 放桌面漫步",
+                    text = if (isPetFloating) "🐾 叫小狗回相框" else "🐾 放桌面漫步",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     color = if (isPetFloating) PetColors.TextMain else Color.White

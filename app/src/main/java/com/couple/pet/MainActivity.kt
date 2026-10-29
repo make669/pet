@@ -212,7 +212,11 @@ fun PetAppRoot(
                         onToggleFloatingPet = { toggleFloatingPet() }
                     )
                     1 -> ShopScreen()
-                    2 -> ProfileScreen()
+                    2 -> ProfileScreen(
+                        isPetFloating = isPetFloating,
+                        onToggleFloatingPet = { toggleFloatingPet() },
+                        onOpenPairDialog = { showPairDialog = true }
+                    )
                 }
             }
         }

@@ -459,7 +459,7 @@ fun HomeScreen(
  * 24 种动物足印图鉴弹窗
  */
 @Composable
-private fun AnimalTracksEncyclopediaDialog(onDismiss: () -> Unit) {
+internal fun AnimalTracksEncyclopediaDialog(onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = RoundedCornerShape(24.dp),

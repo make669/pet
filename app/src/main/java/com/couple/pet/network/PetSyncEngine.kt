@@ -39,6 +39,13 @@ object PetSyncEngine {
     private val _coupleProfile = MutableStateFlow(CoupleProfile())
     val coupleProfile: StateFlow<CoupleProfile> = _coupleProfile.asStateFlow()
 
+    private val _deskNote = MutableStateFlow("记得多喝水，小狗会一直陪着你哦 ❤️")
+    val deskNote: StateFlow<String> = _deskNote.asStateFlow()
+
+    fun updateDeskNote(note: String) {
+        _deskNote.value = note.trim().ifBlank { "今天也要元气满满呀 🐾" }
+    }
+
     private val _remoteEvents = MutableSharedFlow<RemotePetEvent>(extraBufferCapacity = 64)
     val remoteEvents: SharedFlow<RemotePetEvent> = _remoteEvents.asSharedFlow()
 
@@ -120,6 +127,25 @@ object PetSyncEngine {
             return true
         }
         return false
+    }
+
+    /**
+     * 更新情侣昵称
+     */
+    fun updateNicknames(myNick: String, partnerNick: String) {
+        _coupleProfile.value = _coupleProfile.value.copy(
+            myNickname = myNick.trim().ifBlank { "小熊" },
+            partnerNickname = partnerNick.trim().ifBlank { "小兔" }
+        )
+    }
+
+    /**
+     * 更新相伴天数
+     */
+    fun updateDaysTogether(days: Int) {
+        _coupleProfile.value = _coupleProfile.value.copy(
+            daysTogether = days.coerceAtLeast(1)
+        )
     }
 
     /**

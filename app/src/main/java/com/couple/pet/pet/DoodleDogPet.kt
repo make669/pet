@@ -73,26 +73,91 @@ class DoodleDogPet : BasePet(
     override fun drawFace(canvas: Canvas, breath: Float, motion: UniversalPetAction, tick: Long, paints: PetPaintKit) {
         val faceY = -8f + breath
 
-        // 豆豆眼 (带高光闪烁)
-        canvas.drawCircle(-13f, faceY, 3.2f, paints.eyePaint)
-        canvas.drawCircle(-14.2f, faceY - 1.2f, 1.1f, paints.eyeGlintPaint)
-        canvas.drawCircle(13f, faceY, 3.2f, paints.eyePaint)
-        canvas.drawCircle(11.8f, faceY - 1.2f, 1.1f, paints.eyeGlintPaint)
+        when (motion) {
+            UniversalPetAction.POOP -> {
+                // 拱背排便：眼神锁定对视主人 (专注微大豆豆眼 + 高光求保护)
+                canvas.drawCircle(-13f, faceY, 3.8f, paints.eyePaint)
+                canvas.drawCircle(-14.2f, faceY - 1.2f, 1.3f, paints.eyeGlintPaint)
+                canvas.drawCircle(13f, faceY, 3.8f, paints.eyePaint)
+                canvas.drawCircle(11.8f, faceY - 1.2f, 1.3f, paints.eyeGlintPaint)
 
-        // 少女心粉嫩腮红
-        canvas.drawCircle(-21f, faceY + 4f, 4.2f, paints.blushPaint)
-        canvas.drawCircle(21f, faceY + 4f, 4.2f, paints.blushPaint)
+                // 用力/害羞红腮
+                canvas.drawCircle(-21f, faceY + 4f, 5f, paints.blushPaint)
+                canvas.drawCircle(21f, faceY + 4f, 5f, paints.blushPaint)
 
-        // 纽扣小黑鼻
-        canvas.drawCircle(0f, faceY + 3.2f, 2.5f, paints.eyePaint)
+                // 纽扣小黑鼻
+                canvas.drawCircle(0f, faceY + 3.2f, 2.5f, paints.eyePaint)
 
-        // 微笑嘴与舌头 (奔跑或进食时吐小舌头)
-        if (motion == UniversalPetAction.RUN || motion == UniversalPetAction.EAT) {
-            canvas.drawOval(-4f, faceY + 5.5f, 4f, faceY + 12f, paints.tonguePaint)
-            canvas.drawOval(-4f, faceY + 5.5f, 4f, faceY + 12f, paints.fineStrokePaint)
-        } else {
-            canvas.drawLine(-3.5f, faceY + 6.5f, 0f, faceY + 8f, paints.fineStrokePaint)
-            canvas.drawLine(0f, faceY + 8f, 3.5f, faceY + 6.5f, paints.fineStrokePaint)
+                // 专注紧抿小嘴
+                canvas.drawLine(-3.8f, faceY + 7.5f, 3.8f, faceY + 7.5f, paints.fineStrokePaint)
+            }
+            UniversalPetAction.BUSTED_FREEZE -> {
+                // 抓现行瞬间石化：圆瞪大眼 O.O + 震惊小嘴
+                canvas.drawCircle(-13f, faceY, 4.2f, paints.strokePaint)
+                canvas.drawCircle(-13f, faceY, 1.8f, paints.eyePaint)
+                canvas.drawCircle(13f, faceY, 4.2f, paints.strokePaint)
+                canvas.drawCircle(13f, faceY, 1.8f, paints.eyePaint)
+
+                canvas.drawCircle(-21f, faceY + 4f, 4.2f, paints.blushPaint)
+                canvas.drawCircle(21f, faceY + 4f, 4.2f, paints.blushPaint)
+
+                canvas.drawCircle(0f, faceY + 3.2f, 2.5f, paints.eyePaint)
+
+                // 震惊微张小圆嘴
+                canvas.drawCircle(0f, faceY + 8f, 2.2f, paints.fineStrokePaint)
+            }
+            UniversalPetAction.PRANCE_URGENT -> {
+                // 憋急小碎步：慌张豆豆眼 + 波浪嘴 ~
+                canvas.drawCircle(-13f, faceY, 3.2f, paints.eyePaint)
+                canvas.drawCircle(13f, faceY, 3.2f, paints.eyePaint)
+
+                canvas.drawCircle(-21f, faceY + 4f, 4.2f, paints.blushPaint)
+                canvas.drawCircle(21f, faceY + 4f, 4.2f, paints.blushPaint)
+
+                canvas.drawCircle(0f, faceY + 3.2f, 2.5f, paints.eyePaint)
+
+                // 慌张波浪嘴
+                canvas.drawLine(-4f, faceY + 8f, -1.5f, faceY + 6.5f, paints.fineStrokePaint)
+                canvas.drawLine(-1.5f, faceY + 6.5f, 1.5f, faceY + 8.5f, paints.fineStrokePaint)
+                canvas.drawLine(1.5f, faceY + 8.5f, 4f, faceY + 7f, paints.fineStrokePaint)
+            }
+            UniversalPetAction.POOP_ZOOMIES -> {
+                // 拉后一身轻狂欢：弯弯笑眼 ^ ^ + 吐舌头大乐
+                canvas.drawArc(-17f, faceY - 4f, -9f, faceY + 4f, 200f, 140f, false, paints.strokePaint)
+                canvas.drawArc(9f, faceY - 4f, 17f, faceY + 4f, 200f, 140f, false, paints.strokePaint)
+
+                canvas.drawCircle(-21f, faceY + 4f, 5f, paints.blushPaint)
+                canvas.drawCircle(21f, faceY + 4f, 5f, paints.blushPaint)
+
+                canvas.drawCircle(0f, faceY + 3.2f, 2.5f, paints.eyePaint)
+
+                // 吐舌头开怀大笑
+                canvas.drawOval(-4f, faceY + 5.5f, 4f, faceY + 13f, paints.tonguePaint)
+                canvas.drawOval(-4f, faceY + 5.5f, 4f, faceY + 13f, paints.fineStrokePaint)
+            }
+            else -> {
+                // 豆豆眼 (带高光闪烁)
+                canvas.drawCircle(-13f, faceY, 3.2f, paints.eyePaint)
+                canvas.drawCircle(-14.2f, faceY - 1.2f, 1.1f, paints.eyeGlintPaint)
+                canvas.drawCircle(13f, faceY, 3.2f, paints.eyePaint)
+                canvas.drawCircle(11.8f, faceY - 1.2f, 1.1f, paints.eyeGlintPaint)
+
+                // 少女心粉嫩腮红
+                canvas.drawCircle(-21f, faceY + 4f, 4.2f, paints.blushPaint)
+                canvas.drawCircle(21f, faceY + 4f, 4.2f, paints.blushPaint)
+
+                // 纽扣小黑鼻
+                canvas.drawCircle(0f, faceY + 3.2f, 2.5f, paints.eyePaint)
+
+                // 微笑嘴与舌头 (奔跑或进食时吐小舌头)
+                if (motion == UniversalPetAction.RUN || motion == UniversalPetAction.EAT) {
+                    canvas.drawOval(-4f, faceY + 5.5f, 4f, faceY + 12f, paints.tonguePaint)
+                    canvas.drawOval(-4f, faceY + 5.5f, 4f, faceY + 12f, paints.fineStrokePaint)
+                } else {
+                    canvas.drawLine(-3.5f, faceY + 6.5f, 0f, faceY + 8f, paints.fineStrokePaint)
+                    canvas.drawLine(0f, faceY + 8f, 3.5f, faceY + 6.5f, paints.fineStrokePaint)
+                }
+            }
         }
     }
 
@@ -134,10 +199,11 @@ class DoodleDogPet : BasePet(
     override fun drawTail(canvas: Canvas, breath: Float, motion: UniversalPetAction, tick: Long, paints: PetPaintKit) {
         val tailBaseX = 26f
         val tailBaseY = 22f + breath
-        val tailAngle = if (motion == UniversalPetAction.RUN || motion == UniversalPetAction.HAPPY_JUMP) {
-            sin(tick * 0.45).toFloat() * 28f
-        } else {
-            sin(tick * 0.22).toFloat() * 16f
+        val tailAngle = when (motion) {
+            UniversalPetAction.POOP -> -35f // 排便时尾巴高高翘起避开地面
+            UniversalPetAction.POOP_ZOOMIES, UniversalPetAction.RUN, UniversalPetAction.HAPPY_JUMP -> sin(tick * 0.5).toFloat() * 32f
+            UniversalPetAction.BUSTED_FREEZE -> 0f // 石化定格
+            else -> sin(tick * 0.22).toFloat() * 16f
         }
 
         canvas.save()

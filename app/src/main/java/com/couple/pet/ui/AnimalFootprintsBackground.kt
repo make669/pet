@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.core.graphics.toColorInt
@@ -21,57 +20,65 @@ data class AnimalTrackInfo(
     val id: String,
     val name: String,
     val emoji: String,
-    val relX: Float,        // 相对横坐标 (0.05f ~ 0.95f)
-    val relY: Float,        // 相对纵坐标 (0.02f ~ 0.98f)
+    val relX: Float,        // 相对横坐标 (避开卡片遮挡，分布在四周开阔可见区域)
+    val relY: Float,        // 相对纵坐标
     val rotation: Float,    // 旋转倾斜角 (-45f ~ 45f)
-    val scale: Float = 1.0f // 尺寸缩放比例
+    val scale: Float = 1.6f // 放大比例，确保清晰可辨
 )
 
 /**
- * 24 种精细动物足印库定义 (包含用户指定的 小狗、小猫、兔子、猴子、乌龟 及另外 19 种萌宠猛兽)
+ * 24 种精细动物足印库定义 (精心布局在屏幕开阔边缘与下方留白大区，绝不被卡片遮挡)
  */
 object AnimalFootprintLibrary {
 
     val TRACKS = listOf(
-        AnimalTrackInfo("dog", "小狗", "🐶", 0.12f, 0.05f, 15f, 1.1f),
-        AnimalTrackInfo("cat", "小猫", "🐱", 0.88f, 0.08f, -20f, 1.0f),
-        AnimalTrackInfo("rabbit", "小兔", "🐰", 0.08f, 0.18f, 25f, 1.1f),
-        AnimalTrackInfo("monkey", "猴子", "🐒", 0.90f, 0.22f, -12f, 1.15f),
-        AnimalTrackInfo("turtle", "乌龟", "🐢", 0.10f, 0.32f, -15f, 1.05f),
-        AnimalTrackInfo("bear", "棕熊", "🐻", 0.89f, 0.35f, 18f, 1.3f),
-        AnimalTrackInfo("duck", "鸭子", "🦆", 0.11f, 0.44f, 30f, 1.1f),
-        AnimalTrackInfo("bird", "小鸟", "🐥", 0.89f, 0.46f, -25f, 0.9f),
-        AnimalTrackInfo("elephant", "大象", "🐘", 0.10f, 0.55f, -10f, 1.4f),
-        AnimalTrackInfo("horse", "小马", "🐴", 0.90f, 0.58f, 15f, 1.2f),
-        AnimalTrackInfo("cow", "小牛", "🐮", 0.09f, 0.67f, 20f, 1.25f),
-        AnimalTrackInfo("sheep", "小羊", "🐑", 0.91f, 0.69f, -18f, 1.0f),
-        AnimalTrackInfo("pig", "小猪", "🐷", 0.11f, 0.78f, -22f, 1.1f),
-        AnimalTrackInfo("fox", "狐狸", "🦊", 0.88f, 0.80f, 25f, 1.05f),
-        AnimalTrackInfo("raccoon", "浣熊", "🦝", 0.13f, 0.89f, 10f, 1.15f),
-        AnimalTrackInfo("hamster", "仓鼠", "🐹", 0.87f, 0.91f, -15f, 0.85f),
-        AnimalTrackInfo("frog", "青蛙", "🐸", 0.25f, 0.12f, -35f, 1.1f),
-        AnimalTrackInfo("penguin", "企鹅", "🐧", 0.75f, 0.15f, 28f, 1.05f),
-        AnimalTrackInfo("deer", "小鹿", "🦌", 0.22f, 0.95f, 14f, 1.2f),
-        AnimalTrackInfo("hedgehog", "刺猬", "🦔", 0.78f, 0.96f, -24f, 0.95f),
-        AnimalTrackInfo("panda", "熊猫", "🐼", 0.26f, 0.40f, -18f, 1.3f),
-        AnimalTrackInfo("tiger", "老虎", "🐯", 0.74f, 0.42f, 22f, 1.35f),
-        AnimalTrackInfo("sloth", "树懒", "🦥", 0.28f, 0.62f, 32f, 1.1f),
-        AnimalTrackInfo("koala", "考拉", "🐨", 0.72f, 0.65f, -28f, 1.15f)
+        // Zone A: 顶部栏开阔区域 (4种)
+        AnimalTrackInfo("dog", "小狗", "🐶", 0.07f, 0.038f, 18f, 1.6f),
+        AnimalTrackInfo("cat", "小猫", "🐱", 0.93f, 0.038f, -22f, 1.5f),
+        AnimalTrackInfo("hamster", "仓鼠", "🐹", 0.38f, 0.020f, 12f, 1.4f),
+        AnimalTrackInfo("bird", "小鸟", "🐥", 0.62f, 0.020f, -16f, 1.4f),
+
+        // Zone B: 左侧留白侧边栏 (6种，沿着屏幕左缘从上到下漫步)
+        AnimalTrackInfo("rabbit", "小兔", "🐰", 0.045f, 0.16f, 25f, 1.6f),
+        AnimalTrackInfo("turtle", "乌龟", "🐢", 0.045f, 0.28f, -12f, 1.55f),
+        AnimalTrackInfo("duck", "鸭子", "🦆", 0.045f, 0.40f, 20f, 1.5f),
+        AnimalTrackInfo("frog", "青蛙", "🐸", 0.045f, 0.52f, -28f, 1.5f),
+        AnimalTrackInfo("sheep", "小羊", "🐑", 0.045f, 0.64f, 15f, 1.5f),
+        AnimalTrackInfo("pig", "小猪", "🐷", 0.045f, 0.74f, -20f, 1.55f),
+
+        // Zone C: 右侧留白侧边栏 (6种，沿着屏幕右缘从上到下漫步)
+        AnimalTrackInfo("monkey", "猴子", "🐒", 0.955f, 0.16f, -18f, 1.65f),
+        AnimalTrackInfo("bear", "棕熊", "🐻", 0.955f, 0.28f, 16f, 1.8f),
+        AnimalTrackInfo("fox", "狐狸", "🦊", 0.955f, 0.40f, -15f, 1.55f),
+        AnimalTrackInfo("raccoon", "浣熊", "🦝", 0.955f, 0.52f, 22f, 1.6f),
+        AnimalTrackInfo("hedgehog", "刺猬", "🦔", 0.955f, 0.64f, -15f, 1.45f),
+        AnimalTrackInfo("sloth", "树懒", "🦥", 0.955f, 0.74f, 25f, 1.6f),
+
+        // Zone D: 下方开阔空白大区 (8种，围绕在漫步按钮与底部大空间，醒目清晰！)
+        AnimalTrackInfo("koala", "考拉", "🐨", 0.50f, 0.72f, -12f, 1.6f),
+        AnimalTrackInfo("elephant", "大象", "🐘", 0.13f, 0.81f, -15f, 2.0f),
+        AnimalTrackInfo("tiger", "老虎", "🐯", 0.87f, 0.81f, 20f, 1.9f),
+        AnimalTrackInfo("horse", "小马", "🐴", 0.11f, 0.91f, 18f, 1.7f),
+        AnimalTrackInfo("cow", "小牛", "🐮", 0.89f, 0.91f, -22f, 1.7f),
+        AnimalTrackInfo("panda", "熊猫", "🐼", 0.26f, 0.965f, -12f, 1.8f),
+        AnimalTrackInfo("penguin", "企鹅", "🐧", 0.50f, 0.965f, 0f, 1.5f),
+        AnimalTrackInfo("deer", "小鹿", "🦌", 0.74f, 0.965f, 15f, 1.6f)
     )
 }
 
 /**
  * 温暖手绘动物足迹底纹组件 (AnimalFootprintsBackground)
- * 在暖色调宣纸底色上，以温润肉桂暖茶色半透明墨水，优雅印染 24 种动物足印。
+ * 采用清晰可见的焦糖暖栗色（高对比度 + 适中透明度），清晰呈现 24 种动物足印。
  */
 @Composable
 fun AnimalFootprintsBackground(
     modifier: Modifier = Modifier,
-    alpha: Float = 0.10f
+    alpha: Float = 0.42f // 大幅提高透明度，由先前的 0.10f 提升到 0.42f，清晰立现！
 ) {
+    // 采用更浓郁清晰的焦糖栗木色 #7D4E2D
     val trackPaint = remember(alpha) {
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = "#A6805D".toColorInt()
+            color = "#7D4E2D".toColorInt()
             style = Paint.Style.FILL
             this.alpha = (alpha * 255).toInt().coerceIn(0, 255)
         }
@@ -79,12 +86,21 @@ fun AnimalFootprintsBackground(
 
     val strokePaint = remember(alpha) {
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = "#A6805D".toColorInt()
+            color = "#7D4E2D".toColorInt()
             style = Paint.Style.STROKE
-            strokeWidth = 2.4f
+            strokeWidth = 3.2f
             strokeCap = Paint.Cap.ROUND
             strokeJoin = Paint.Join.ROUND
             this.alpha = (alpha * 255).toInt().coerceIn(0, 255)
+        }
+    }
+
+    val labelPaint = remember(alpha) {
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = "#6E4223".toColorInt()
+            textSize = 22f
+            textAlign = Paint.Align.CENTER
+            this.alpha = ((alpha + 0.15f).coerceAtMost(1.0f) * 255).toInt()
         }
     }
 
@@ -102,6 +118,9 @@ fun AnimalFootprintsBackground(
 
                 canvas.save()
                 canvas.translate(cx, cy)
+
+                // 绘制足印本身 (带旋转与放大比例)
+                canvas.save()
                 canvas.rotate(track.rotation)
                 canvas.scale(track.scale, track.scale)
 
@@ -131,6 +150,10 @@ fun AnimalFootprintsBackground(
                     "sloth" -> drawSlothClaw(canvas, path, strokePaint)
                     "koala" -> drawKoalaHand(canvas, path, trackPaint)
                 }
+                canvas.restore()
+
+                // 在足印下方带一个超可爱微缩标签（如 "小狗"、"乌龟"、"猴子"），辨识度拉满！
+                canvas.drawText(track.name, 0f, 26f * track.scale, labelPaint)
 
                 canvas.restore()
             }

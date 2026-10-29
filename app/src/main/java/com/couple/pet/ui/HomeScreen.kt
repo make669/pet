@@ -80,10 +80,10 @@ fun HomeScreen(
             .fillMaxSize()
             .background(PetColors.Background)
     ) {
-        // 24 种动物手印足迹温暖印染底纹
+        // 24 种动物手印足迹温暖印染底纹 (大幅提高清晰度与对比度，清晰立现)
         AnimalFootprintsBackground(
             modifier = Modifier.fillMaxSize(),
-            alpha = 0.12f
+            alpha = 0.45f
         )
 
         Column(

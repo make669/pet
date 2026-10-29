@@ -72,6 +72,16 @@ abstract class BasePet(
     open fun getHungryBubble(): String = "肚肚好扁... 想吃$favoriteFood 🥺"
 
     /**
+     * 排泄生理特征专属心声气泡
+     */
+    open fun getPoopBubble(): String = "主人看好我，别让坏人过来... 🥺"
+    open fun getPeeBubble(): String = "抬腿标记！这里归我守护 🐾"
+    open fun getPranceBubble(): String = "急急急！快憋不住啦 😖"
+    open fun getZoomiesBubble(): String = "拉完啦！一身轻松冲冲冲 💨💨"
+    open fun getBustedBubble(): String = "（被抓现行，瞬间石化不敢动... 😳）"
+    open fun getCleanThankBubble(): String = "小窝干干净净啦！谢谢铲屎官主人 ❤️"
+
+    /**
      * 获取物种专属绝活动作名称
      */
     abstract fun getSpecialTrickName(): String
@@ -152,6 +162,21 @@ abstract class BasePet(
             UniversalPetAction.SPECIAL_TRICK -> {
                 drawSpecialTrickPose(canvas, breath, tick, paints)
             }
+            UniversalPetAction.POOP -> {
+                drawPoopingPose(canvas, breath, tick, paints)
+            }
+            UniversalPetAction.PEE -> {
+                drawPeeingPose(canvas, breath, tick, paints)
+            }
+            UniversalPetAction.PRANCE_URGENT -> {
+                drawPrancingPose(canvas, breath, tick, paints)
+            }
+            UniversalPetAction.BUSTED_FREEZE -> {
+                drawBustedFreezePose(canvas, breath, tick, paints)
+            }
+            UniversalPetAction.POOP_ZOOMIES -> {
+                drawZoomiesPose(canvas, breath, tick, paints)
+            }
             else -> {
                 // 标准站姿/走跑流水线
                 drawStandardPipeline(canvas, breath, motion, tick, paints)
@@ -228,10 +253,18 @@ abstract class BasePet(
     // ================= 5. 子类可按物种特性重写的特殊姿态 =================
 
     /**
-     * 绘制配饰或前爪抱物 (默认绘制粉红爱心)
+     * 绘制配饰或前爪抱物 (默认绘制粉红爱心，排泄/憋急/石化姿态不抱心)
      */
     protected open fun drawAccessories(canvas: Canvas, breath: Float, motion: UniversalPetAction, tick: Long, paints: PetPaintKit) {
-        // 默认两只小前爪合抱在胸前的小爱心
+        if (motion in listOf(
+            UniversalPetAction.POOP,
+            UniversalPetAction.PEE,
+            UniversalPetAction.PRANCE_URGENT,
+            UniversalPetAction.BUSTED_FREEZE,
+            UniversalPetAction.POOP_ZOOMIES
+        )) {
+            return
+        }
         val heartY = 8f + breath
         propPath.reset()
         propPath.moveTo(0f, heartY + 12f)
@@ -279,5 +312,105 @@ abstract class BasePet(
      */
     protected open fun drawSpecialTrickPose(canvas: Canvas, breath: Float, tick: Long, paints: PetPaintKit) {
         drawStandardPipeline(canvas, breath, UniversalPetAction.SPECIAL_TRICK, tick, paints)
+    }
+
+    /**
+     * 拱背拉臭臭姿态（经典身体下沉微躬，眼神直视主人求保护）
+     */
+    protected open fun drawPoopingPose(canvas: Canvas, breath: Float, tick: Long, paints: PetPaintKit) {
+        canvas.save()
+        // 身体下沉与深蹲微颤
+        val strainJitter = kotlin.math.sin(tick * 0.8).toFloat() * 0.6f
+        canvas.translate(strainJitter, 8f)
+        canvas.scale(1.04f, 0.92f)
+        drawStandardPipeline(canvas, breath * 0.3f, UniversalPetAction.POOP, tick, paints)
+
+        // 额头专注与尴尬汗珠
+        canvas.drawOval(20f, -22f, 25f, -15f, paints.blushPaint)
+        canvas.drawOval(20f, -22f, 25f, -15f, paints.fineStrokePaint)
+
+        // 屁股后方地面出现刚落地的小臭臭轮廓 (2D极简线稿风，两圈可爱螺旋纹)
+        val rearX = if (facingRight) -26f else 26f
+        canvas.drawOval(rearX - 7f, 32f, rearX + 7f, 38f, paints.fineStrokePaint)
+        canvas.drawCircle(rearX, 30f, 4f, paints.fineStrokePaint)
+        canvas.drawCircle(rearX, 26f, 2f, paints.fineStrokePaint)
+
+        canvas.restore()
+    }
+
+    /**
+     * 抬腿/半蹲撒尿标记姿态
+     */
+    protected open fun drawPeeingPose(canvas: Canvas, breath: Float, tick: Long, paints: PetPaintKit) {
+        canvas.save()
+        canvas.rotate(if (facingRight) 7f else -7f, 0f, 20f)
+        drawStandardPipeline(canvas, breath, UniversalPetAction.PEE, tick, paints)
+
+        // 抬起一只腿的可爱动作线 (黑白手绘风)
+        val legX = if (facingRight) -20f else 20f
+        canvas.save()
+        canvas.rotate(if (facingRight) -32f else 32f, legX, 24f)
+        canvas.drawRoundRect(legX - 3.5f, 12f, legX + 3.5f, 32f, 3f, 3f, paints.furPaint)
+        canvas.drawRoundRect(legX - 3.5f, 12f, legX + 3.5f, 32f, 3f, 3f, paints.strokePaint)
+        canvas.restore()
+
+        // 旁边小水花点缀与地面小水滩
+        val puddleX = if (facingRight) -28f else 28f
+        canvas.drawOval(puddleX - 9f, 34f, puddleX + 9f, 39f, paints.furPaint)
+        canvas.drawOval(puddleX - 9f, 34f, puddleX + 9f, 39f, paints.fineStrokePaint)
+        canvas.drawCircle(puddleX + 4f, 26f, 1.8f, paints.fineStrokePaint)
+        canvas.drawCircle(puddleX - 3f, 22f, 1.4f, paints.fineStrokePaint)
+
+        canvas.restore()
+    }
+
+    /**
+     * 憋急小碎步姿态 (高频踩踏，急切找角落)
+     */
+    protected open fun drawPrancingPose(canvas: Canvas, breath: Float, tick: Long, paints: PetPaintKit) {
+        val jitter = kotlin.math.sin(tick * 0.75).toFloat() * 3f
+        val sway = kotlin.math.sin(tick * 0.35).toFloat() * 4f
+        canvas.save()
+        canvas.translate(jitter, 0f)
+        canvas.rotate(sway, 0f, 20f)
+        drawStandardPipeline(canvas, breath, UniversalPetAction.PRANCE_URGENT, tick, paints)
+        // 头顶急迫小水滴
+        canvas.drawOval(20f, -24f, 25f, -17f, paints.blushPaint)
+        canvas.drawOval(20f, -24f, 25f, -17f, paints.fineStrokePaint)
+        canvas.restore()
+    }
+
+    /**
+     * 被抓现行瞬间石化定格姿态
+     */
+    protected open fun drawBustedFreezePose(canvas: Canvas, breath: Float, tick: Long, paints: PetPaintKit) {
+        val freezeTremble = kotlin.math.sin(tick * 1.5).toFloat() * 1.2f
+        canvas.save()
+        canvas.translate(freezeTremble, 0f)
+        drawStandardPipeline(canvas, 0f, UniversalPetAction.BUSTED_FREEZE, tick, paints)
+        // 额头大尴尬水滴
+        canvas.drawOval(22f, -26f, 28f, -14f, paints.blushPaint)
+        canvas.drawOval(22f, -26f, 28f, -14f, paints.strokePaint)
+        // 旁边悬挂三根石化尴尬竖线 |||
+        canvas.drawLine(-22f, -32f, -22f, -22f, paints.fineStrokePaint)
+        canvas.drawLine(-17f, -34f, -17f, -22f, paints.fineStrokePaint)
+        canvas.drawLine(-12f, -32f, -12f, -22f, paints.fineStrokePaint)
+        canvas.restore()
+    }
+
+    /**
+     * 排泄一身轻后的狂欢疾驰姿态 (Zoomies)
+     */
+    protected open fun drawZoomiesPose(canvas: Canvas, breath: Float, tick: Long, paints: PetPaintKit) {
+        canvas.save()
+        canvas.rotate(if (facingRight) 15f else -15f, 0f, 12f)
+        drawStandardPipeline(canvas, breath * 1.8f, UniversalPetAction.RUN, tick, paints)
+        // 极速冲刺速度线与飞尘气流
+        val dustX = if (facingRight) -34f else 34f
+        val dir = if (facingRight) 1f else -1f
+        canvas.drawLine(dustX, 16f, dustX - dir * 16f, 12f, paints.strokePaint)
+        canvas.drawLine(dustX + dir * 4f, 24f, dustX - dir * 20f, 24f, paints.fineStrokePaint)
+        canvas.drawLine(dustX + dir * 2f, 32f, dustX - dir * 14f, 30f, paints.fineStrokePaint)
+        canvas.restore()
     }
 }

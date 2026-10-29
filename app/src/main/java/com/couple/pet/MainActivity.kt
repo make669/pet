@@ -149,6 +149,11 @@ fun PetAppRoot(
                     coroutineScope.launch { drawerState.close() }
                 }
 
+                DrawerCircleActionRow("💩", "观察生理排泄 (演示)", Color(0xFF8D6E63)) {
+                    PetSyncEngine.triggerPoopDemo()
+                    coroutineScope.launch { drawerState.close() }
+                }
+
                 DrawerCircleActionRow("💕", "情侣配对码", PetColors.DrawerPair) {
                     showPairDialog = true
                     coroutineScope.launch { drawerState.close() }

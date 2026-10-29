@@ -32,7 +32,14 @@ enum class UniversalPetAction(
     DRAGGED("空中悬浮", "被手指按住悬空扑腾四爪", isResting = false, defaultDurationMs = 1000L),
 
     // 4. 物种专属独特绝活 (由各宠物子类自主个性化重写)
-    SPECIAL_TRICK("专属绝活", "物种专属的个性绝活展示", isResting = false, defaultDurationMs = 2800L);
+    SPECIAL_TRICK("专属绝活", "物种专属的个性绝活展示", isResting = false, defaultDurationMs = 2800L),
+
+    // 5. 生理代谢与排泄真实天性动作
+    PRANCE_URGENT("憋急碎步", "后半身微弓小碎步急踏，急切寻觅角落", canMove = true, defaultDurationMs = 2500L),
+    POOP("拱背排便", "严肃弓背蹲下，眼神直视主人求保护", isResting = false, canMove = false, defaultDurationMs = 2800L),
+    PEE("抬腿撒尿", "单腿微抬或半蹲，点状标记或排空，伴随小水花", isResting = false, canMove = false, defaultDurationMs = 2200L),
+    POOP_ZOOMIES("拉后狂奔", "排便一身轻后，极速冲刺自豪狂欢", canMove = true, defaultDurationMs = 2500L),
+    BUSTED_FREEZE("被抓定格", "正在方便时突然被抓现行，全身僵硬不敢动", isResting = false, canMove = false, defaultDurationMs = 2000L);
 
     /**
      * 判断是否是静态驻留动作

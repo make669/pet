@@ -177,7 +177,7 @@ fun HomeScreen(
                 PolaroidPuppyViewport(
                     isPetFloating = isPetFloating,
                     onPetTouched = {
-                        showToast("小狗开心地蹭了蹭你的手掌 ❤️")
+                        // 触碰反馈直接呈现在相框宠物头顶的心声气泡中，不再弹出底部黑条
                     },
                     feedTrigger = feedTrigger,
                     fedFoodName = lastFedFoodName,
@@ -379,7 +379,7 @@ fun HomeScreen(
                                 )
                                 lastFedFoodName = foodItem.name
                                 feedTrigger++
-                                showToast("投喂了【${foodItem.name}】！${foodItem.buffDescription} 😋")
+                                // 彻底移除底部悬浮黑条，反馈 100% 呈现在相框宠物头顶的心声气泡中
                             },
                             onLongClick = {
                                 showCustomizeDialog = true
@@ -419,30 +419,6 @@ fun HomeScreen(
         }
 
         Spacer(modifier = Modifier.weight(0.55f))
-
-        // 浮动交互即时反馈条
-        AnimatedVisibility(
-            visible = feedbackTip != null,
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier.padding(bottom = 12.dp)
-        ) {
-            feedbackTip?.let { tip ->
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(PetColors.TextMain.copy(alpha = 0.88f))
-                        .padding(horizontal = 16.dp, vertical = 7.dp)
-                ) {
-                    Text(
-                        text = tip,
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
-        }
     } // 闭合 Column
     } // 闭合底纹 Box
 

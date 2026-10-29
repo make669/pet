@@ -34,6 +34,7 @@ import com.couple.pet.pet.UniversalPetAction
 import com.couple.pet.ui.theme.PetColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.sin
 import kotlin.random.Random
@@ -73,14 +74,16 @@ fun PolaroidPuppyViewport(
     var tick by remember { mutableLongStateOf(0L) }
     var speechBubble by remember { mutableStateOf<String?>(null) }
     var showHeartEffect by remember { mutableStateOf(false) }
+    val activePet by PetRegistry.activePet.collectAsState()
+    val coroutineScope = rememberCoroutineScope()
 
-    // 投喂响应动效
+    // 投喂响应动效 (在相框小狗头顶气泡中温馨呈现，如用户原型图所示)
     LaunchedEffect(feedTrigger) {
         if (feedTrigger > 0L && !isPetFloating) {
             behavior = FramePuppyBehavior.HAPPY_JUMP
-            speechBubble = if (fedFoodName.isNotEmpty()) "吃到了 $fedFoodName 😋" else "好香好香~ 😋"
+            speechBubble = activePet.getEatReaction(fedFoodName.ifEmpty { "小鱼干" })
             showHeartEffect = true
-            delay(1600)
+            delay(2000)
             showHeartEffect = false
             speechBubble = null
             behavior = FramePuppyBehavior.WALKING
@@ -238,7 +241,13 @@ fun PolaroidPuppyViewport(
                         PetSyncEngine.poke()
                         behavior = FramePuppyBehavior.HAPPY_JUMP
                         showHeartEffect = true
-                        speechBubble = "小狗开心地蹭你的指尖 ❤️"
+                        speechBubble = activePet.getTouchReaction()
+                        coroutineScope.launch {
+                            delay(2000)
+                            showHeartEffect = false
+                            speechBubble = null
+                            behavior = FramePuppyBehavior.WALKING
+                        }
                     }
             ) {
                 // 小狗心声泡泡 (如果朝左则反转字体防镜像翻转)

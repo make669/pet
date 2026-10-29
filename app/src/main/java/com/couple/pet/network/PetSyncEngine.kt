@@ -56,13 +56,30 @@ object PetSyncEngine {
      * 投喂食物
      */
     fun feed(amount: Int = 15) {
+        feedItem("小鱼干", hungerBoost = amount)
+    }
+
+    /**
+     * 投喂自定义美食或互动道具
+     */
+    fun feedItem(
+        name: String,
+        hungerBoost: Int = 15,
+        moodBoost: Int = 0,
+        cleanBoost: Int = 0
+    ) {
         val current = _petStats.value
-        val updatedHunger = (current.hunger + amount).coerceAtMost(100)
-        val updatedStats = addExpAndCheckLevelUp(current, 10).copy(
-            hunger = updatedHunger
+        val updatedHunger = (current.hunger + hungerBoost).coerceIn(0, 100)
+        val updatedMood = (current.mood + moodBoost).coerceIn(0, 100)
+        val updatedClean = (current.clean + cleanBoost).coerceIn(0, 100)
+        val expGain = ((hungerBoost + moodBoost + cleanBoost) / 3).coerceAtLeast(6)
+        val updatedStats = addExpAndCheckLevelUp(current, expGain).copy(
+            hunger = updatedHunger,
+            mood = updatedMood,
+            clean = updatedClean
         )
         _petStats.value = updatedStats
-        _remoteEvents.tryEmit(RemotePetEvent.PartnerFed("小鱼干", updatedHunger))
+        _remoteEvents.tryEmit(RemotePetEvent.PartnerFed(name, updatedHunger))
     }
 
     /**

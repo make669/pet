@@ -57,6 +57,8 @@ enum class FramePuppyBehavior {
 fun PolaroidPuppyViewport(
     isPetFloating: Boolean,
     onPetTouched: () -> Unit,
+    feedTrigger: Long = 0L,
+    fedFoodName: String = "",
     modifier: Modifier = Modifier
 ) {
     // 游荡坐标与状态
@@ -67,6 +69,19 @@ fun PolaroidPuppyViewport(
     var tick by remember { mutableLongStateOf(0L) }
     var speechBubble by remember { mutableStateOf<String?>(null) }
     var showHeartEffect by remember { mutableStateOf(false) }
+
+    // 投喂响应动效
+    LaunchedEffect(feedTrigger) {
+        if (feedTrigger > 0L && !isPetFloating) {
+            behavior = FramePuppyBehavior.HAPPY_JUMP
+            speechBubble = if (fedFoodName.isNotEmpty()) "吃到了 $fedFoodName 😋" else "好香好香~ 😋"
+            showHeartEffect = true
+            delay(1600)
+            showHeartEffect = false
+            speechBubble = null
+            behavior = FramePuppyBehavior.WALKING
+        }
+    }
 
     // 触控回弹动画
     val jumpScale by animateFloatAsState(

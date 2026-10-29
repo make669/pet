@@ -26,17 +26,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.couple.pet.model.PetFoodManager
 import com.couple.pet.network.PetSyncEngine
 import com.couple.pet.service.PetFloatingService
 import com.couple.pet.ui.HomeScreen
 import com.couple.pet.ui.ProfileScreen
 import com.couple.pet.ui.ShopScreen
+import com.couple.pet.ui.theme.PetColors
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        PetFoodManager.init(this)
         setContent {
             MaterialTheme {
                 PetAppRoot(
@@ -91,57 +94,60 @@ fun PetAppRoot(
     var isPetFloating by remember { mutableStateOf(false) }
     var showPairDialog by remember { mutableStateOf(false) }
 
-    // 抽屉导航：完全对应手绘左上角「三」展开出来的 5 个圆圈功能快捷键
+    fun toggleFloatingPet() {
+        if (isPetFloating) {
+            onStopPet()
+            isPetFloating = false
+        } else {
+            onStartPet()
+            isPetFloating = true
+        }
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet(
                 modifier = Modifier.width(280.dp),
-                drawerContainerColor = Color.White
+                drawerContainerColor = PetColors.Surface
             ) {
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(28.dp))
                 Text(
                     text = "⚙️ 快捷魔盒",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF263238),
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+                    color = PetColors.TextMain,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp)
                 )
                 Text(
                     text = "点击小圆圈快速互动",
-                    fontSize = 12.sp,
-                    color = Color.Gray,
-                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 20.dp)
+                    fontSize = 13.sp,
+                    color = PetColors.TextSub,
+                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 18.dp)
                 )
 
                 // 5 个功能小圆圈按钮列表（手绘原型 [O O O O O]）
-                DrawerCircleActionRow("🐾", if (isPetFloating) "收起桌宠" else "唤醒桌宠") {
-                    if (isPetFloating) {
-                        onStopPet()
-                        isPetFloating = false
-                    } else {
-                        onStartPet()
-                        isPetFloating = true
-                    }
+                DrawerCircleActionRow("🐾", if (isPetFloating) "收起桌宠" else "唤醒桌宠", PetColors.DrawerPet) {
+                    toggleFloatingPet()
                     coroutineScope.launch { drawerState.close() }
                 }
 
-                DrawerCircleActionRow("🐟", "喂小鱼干 (+15)") {
+                DrawerCircleActionRow("🐟", "喂小鱼干 (+15)", PetColors.DrawerFeed) {
                     PetSyncEngine.feed(15)
                     coroutineScope.launch { drawerState.close() }
                 }
 
-                DrawerCircleActionRow("❤️", "摸摸小狗 (+10)") {
+                DrawerCircleActionRow("❤️", "摸摸小狗 (+10)", PetColors.DrawerPoke) {
                     PetSyncEngine.poke()
                     coroutineScope.launch { drawerState.close() }
                 }
 
-                DrawerCircleActionRow("🛁", "洗香香澡 (拉满)") {
+                DrawerCircleActionRow("🛁", "洗香香澡 (拉满)", PetColors.DrawerBath) {
                     PetSyncEngine.bath()
                     coroutineScope.launch { drawerState.close() }
                 }
 
-                DrawerCircleActionRow("💕", "情侣配对码") {
+                DrawerCircleActionRow("💕", "情侣配对码", PetColors.DrawerPair) {
                     showPairDialog = true
                     coroutineScope.launch { drawerState.close() }
                 }
@@ -150,42 +156,47 @@ fun PetAppRoot(
     ) {
         Scaffold(
             bottomBar = {
-                // 底部 3 大 Tab 导航栏（完全对齐手绘：主页、商店、我的）
                 NavigationBar(
-                    containerColor = Color.White,
-                    tonalElevation = 8.dp
+                    containerColor = PetColors.Surface,
+                    tonalElevation = 0.dp
                 ) {
                     NavigationBarItem(
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0 },
                         icon = { Icon(Icons.Default.Home, contentDescription = "主页") },
-                        label = { Text("主页", fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal) },
+                        label = { Text("主页", fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Medium) },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Color(0xFFFF8DA1),
-                            selectedTextColor = Color(0xFFFF8DA1),
-                            indicatorColor = Color(0xFFFFF0F3)
+                            selectedIconColor = PetColors.Primary,
+                            selectedTextColor = PetColors.Primary,
+                            indicatorColor = PetColors.PrimaryContainer,
+                            unselectedIconColor = PetColors.TextMuted,
+                            unselectedTextColor = PetColors.TextSub
                         )
                     )
                     NavigationBarItem(
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
                         icon = { Icon(Icons.Default.ShoppingCart, contentDescription = "商店") },
-                        label = { Text("商店", fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal) },
+                        label = { Text("商店", fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Medium) },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Color(0xFFFF8DA1),
-                            selectedTextColor = Color(0xFFFF8DA1),
-                            indicatorColor = Color(0xFFFFF0F3)
+                            selectedIconColor = PetColors.Primary,
+                            selectedTextColor = PetColors.Primary,
+                            indicatorColor = PetColors.PrimaryContainer,
+                            unselectedIconColor = PetColors.TextMuted,
+                            unselectedTextColor = PetColors.TextSub
                         )
                     )
                     NavigationBarItem(
                         selected = selectedTab == 2,
                         onClick = { selectedTab = 2 },
                         icon = { Icon(Icons.Default.Person, contentDescription = "我的") },
-                        label = { Text("我的", fontWeight = if (selectedTab == 2) FontWeight.Bold else FontWeight.Normal) },
+                        label = { Text("我的", fontWeight = if (selectedTab == 2) FontWeight.Bold else FontWeight.Medium) },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Color(0xFFFF8DA1),
-                            selectedTextColor = Color(0xFFFF8DA1),
-                            indicatorColor = Color(0xFFFFF0F3)
+                            selectedIconColor = PetColors.Primary,
+                            selectedTextColor = PetColors.Primary,
+                            indicatorColor = PetColors.PrimaryContainer,
+                            unselectedIconColor = PetColors.TextMuted,
+                            unselectedTextColor = PetColors.TextSub
                         )
                     )
                 }
@@ -193,9 +204,13 @@ fun PetAppRoot(
         ) { paddingValues ->
             Box(modifier = Modifier.padding(paddingValues)) {
                 when (selectedTab) {
-                    0 -> HomeScreen(onOpenDrawer = { coroutineScope.launch { drawerState.open() } })
+                    0 -> HomeScreen(
+                        onOpenDrawer = { coroutineScope.launch { drawerState.open() } },
+                        isPetFloating = isPetFloating,
+                        onToggleFloatingPet = { toggleFloatingPet() }
+                    )
                     1 -> ShopScreen()
-                    2 -> ProfileScreen() // 按手绘要求留白
+                    2 -> ProfileScreen()
                 }
             }
         }
@@ -208,12 +223,14 @@ fun PetAppRoot(
 
         AlertDialog(
             onDismissRequest = { showPairDialog = false },
-            title = { Text("💕 情侣双人网络领养", fontWeight = FontWeight.Bold) },
+            shape = RoundedCornerShape(24.dp),
+            containerColor = PetColors.Surface,
+            title = { Text("💕 情侣双人网络领养", fontWeight = FontWeight.Bold, color = PetColors.TextMain) },
             text = {
                 Column {
                     Text(
                         text = "专属配对码：${coupleProfile.pairCode}",
-                        color = Color(0xFFFF7043),
+                        color = PetColors.Primary,
                         fontWeight = FontWeight.Bold,
                         fontSize = 16.sp
                     )
@@ -222,6 +239,11 @@ fun PetAppRoot(
                         value = inputCode,
                         onValueChange = { inputCode = it },
                         label = { Text("输入 TA 的 6 位配对码") },
+                        shape = RoundedCornerShape(16.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = PetColors.Primary,
+                            unfocusedBorderColor = PetColors.CardBorder
+                        ),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -233,14 +255,15 @@ fun PetAppRoot(
                             showPairDialog = false
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF8DA1))
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = PetColors.Primary)
                 ) {
-                    Text("确认绑定")
+                    Text("确认绑定", color = Color.White)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showPairDialog = false }) {
-                    Text("取消")
+                    Text("取消", color = PetColors.TextSub)
                 }
             }
         )
@@ -248,7 +271,7 @@ fun PetAppRoot(
 }
 
 @Composable
-fun DrawerCircleActionRow(emoji: String, title: String, onClick: () -> Unit) {
+fun DrawerCircleActionRow(emoji: String, title: String, circleBg: Color, onClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -260,18 +283,18 @@ fun DrawerCircleActionRow(emoji: String, title: String, onClick: () -> Unit) {
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
-                .size(44.dp)
+                .size(46.dp)
                 .clip(CircleShape)
-                .background(Color(0xFFFFF2F4))
+                .background(circleBg)
         ) {
-            Text(text = emoji, fontSize = 20.sp)
+            Text(text = emoji, fontSize = 22.sp)
         }
         Spacer(modifier = Modifier.width(16.dp))
         Text(
             text = title,
             fontSize = 15.sp,
             fontWeight = FontWeight.Medium,
-            color = Color(0xFF37474F)
+            color = PetColors.TextMain
         )
     }
 }

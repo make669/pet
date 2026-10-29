@@ -1,6 +1,7 @@
 package com.couple.pet.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -20,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.couple.pet.network.PetSyncEngine
+import com.couple.pet.ui.theme.PetColors
 
 data class ShopItem(
     val id: String,
@@ -31,6 +33,9 @@ data class ShopItem(
     val onBuy: () -> Unit
 )
 
+/**
+ * 【商店】：全新日系治愈暖色调重构
+ */
 @Composable
 fun ShopScreen() {
     var searchQuery by remember { mutableStateOf("") }
@@ -60,31 +65,31 @@ fun ShopScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFFBF8F5))
+            .background(PetColors.Background)
             .padding(horizontal = 16.dp)
     ) {
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 1. 顶部标题与搜索框 (完全对应手绘原型顶部的搜索框)
+        // 1. 顶部标题与搜索框
         Text(
-            text = "🐾 宠物萌物商店",
+            text = "🐾 宠物萌物集市",
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFF263238),
+            color = PetColors.TextMain,
             modifier = Modifier.padding(bottom = 12.dp)
         )
 
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
-            placeholder = { Text("搜索食物、装扮或新宠物...") },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = "搜索") },
+            placeholder = { Text("搜索食物、装扮或新宠物...", color = PetColors.TextMuted, fontSize = 14.sp) },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = "搜索", tint = PetColors.TextSub) },
             shape = RoundedCornerShape(24.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White,
-                focusedBorderColor = Color(0xFFFF8DA1),
-                unfocusedBorderColor = Color(0xFFE0E0E0)
+                focusedContainerColor = PetColors.Surface,
+                unfocusedContainerColor = PetColors.Surface,
+                focusedBorderColor = PetColors.Primary,
+                unfocusedBorderColor = PetColors.CardBorder
             ),
             modifier = Modifier
                 .fillMaxWidth()
@@ -93,7 +98,7 @@ fun ShopScreen() {
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // 2. 横向分类胶囊栏 (对应手绘原型中的 [pet] [食物] [O] [O])
+        // 2. 横向分类胶囊栏
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth()
@@ -103,15 +108,20 @@ fun ShopScreen() {
                 Box(
                     modifier = Modifier
                         .clip(CircleShape)
-                        .background(if (isSelected) Color(0xFF263238) else Color.White)
+                        .background(if (isSelected) PetColors.TagSelected else PetColors.TagUnselected)
+                        .border(
+                            width = 1.dp,
+                            color = if (isSelected) PetColors.TagSelected else PetColors.TagBorder,
+                            shape = CircleShape
+                        )
                         .clickable { selectedCategory = cat }
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .padding(horizontal = 16.dp, vertical = 7.dp)
                 ) {
                     Text(
                         text = cat,
-                        color = if (isSelected) Color.White else Color(0xFF546E7A),
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                        fontSize = 14.sp
+                        color = if (isSelected) Color.White else PetColors.TagTextUnselected,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        fontSize = 13.sp
                     )
                 }
             }
@@ -119,7 +129,7 @@ fun ShopScreen() {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 3. 商品列表展示 (左方块 [ ]，右文字三行，完全对齐手绘原型)
+        // 3. 商品列表展示
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxSize()
@@ -136,10 +146,18 @@ fun ShopScreen() {
 
 @Composable
 fun ShopItemCard(item: ShopItem) {
+    val categoryBg = when (item.category) {
+        "食物" -> PetColors.DrawerFeed
+        "装扮" -> PetColors.DrawerPoke
+        "pet" -> PetColors.DrawerPet
+        else -> PetColors.DrawerBath
+    }
+
     Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = PetColors.Surface),
+        border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(PetColors.CardBorder)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -148,54 +166,79 @@ fun ShopItemCard(item: ShopItem) {
                 .fillMaxWidth()
                 .padding(14.dp)
         ) {
-            // 左侧：商品图标方块 [ ]
+            // 左侧：商品图标方块
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .size(68.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xFFFFF5E6))
+                    .size(64.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(categoryBg)
             ) {
-                Text(text = item.iconEmoji, fontSize = 34.sp)
+                Text(text = item.iconEmoji, fontSize = 32.sp)
             }
 
             Spacer(modifier = Modifier.width(14.dp))
 
-            // 中间：三行文字信息 (名称、说明、价格)
+            // 中间：文字信息
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = item.name,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
-                    color = Color(0xFF263238)
+                    color = PetColors.TextMain
                 )
                 Text(
                     text = item.description,
                     fontSize = 12.sp,
-                    color = Color(0xFF78909C),
-                    modifier = Modifier.padding(top = 2.dp, bottom = 4.dp)
+                    color = PetColors.TextSub,
+                    modifier = Modifier.padding(top = 2.dp, bottom = 6.dp)
                 )
-                Text(
-                    text = if (item.price == 0) "已拥有" else "🪙 ${item.price} 金币",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (item.price == 0) Color(0xFF4CAF50) else Color(0xFFFF7043)
-                )
+                // 价格小药丸
+                if (item.price == 0) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFFECFDF5))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "已拥有",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF059669)
+                        )
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(PetColors.PriceBadge)
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "🪙 ${item.price} 金币",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PetColors.PriceText
+                        )
+                    }
+                }
             }
 
-            // 右侧：快捷兑换/使用按钮
+            // 右侧：兑换/使用按钮
             Button(
                 onClick = item.onBuy,
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(18.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (item.price == 0) Color(0xFFE0E0E0) else Color(0xFFFF8DA1)
+                    containerColor = if (item.price == 0) PetColors.SurfaceVariant else PetColors.Primary
                 ),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
             ) {
                 Text(
-                    text = if (item.price == 0) "使用" else "购买",
+                    text = if (item.price == 0) "已穿戴" else "购买",
                     fontSize = 13.sp,
-                    color = if (item.price == 0) Color.DarkGray else Color.White
+                    fontWeight = FontWeight.Medium,
+                    color = if (item.price == 0) PetColors.TextSub else Color.White
                 )
             }
         }

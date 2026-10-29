@@ -197,20 +197,18 @@ fun HomeScreen(
                         }
                     }
 
-                    // 桌面漫步切换按钮 (精巧药丸胶囊)
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = if (isPetFloating) PetColors.PrimaryContainer else PetColors.Primary,
+                    // 右侧轻柔状态标签
+                    Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(14.dp))
-                            .clickable { onToggleFloatingPet() }
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isPetFloating) PetColors.PrimaryContainer else PetColors.SurfaceVariant.copy(alpha = 0.6f))
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
                         Text(
-                            text = if (isPetFloating) "🐾 叫回相框" else "🐾 放桌面漫步",
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isPetFloating) PetColors.Primary else Color.White,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            text = if (isPetFloating) "桌面漫步中" else "相框小憩中",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (isPetFloating) PetColors.Primary else PetColors.TextSub
                         )
                     }
                 }
@@ -359,7 +357,35 @@ fun HomeScreen(
             }
         }
 
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.weight(0.45f))
+
+        // ================= 核心操作：放桌面漫步 / 叫回相框 切换大按钮 (位于下方空白区域，大小比例优雅舒展) =================
+        Button(
+            onClick = onToggleFloatingPet,
+            shape = RoundedCornerShape(25.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (isPetFloating) PetColors.PrimaryContainer else PetColors.Primary
+            ),
+            elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp, pressedElevation = 4.dp),
+            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 13.dp),
+            modifier = Modifier
+                .fillMaxWidth(0.82f)
+                .height(50.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = if (isPetFloating) "🐾 叫${activePet.defaultNick}回相框" else "🐾 放桌面漫步",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isPetFloating) PetColors.Primary else Color.White
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.weight(0.55f))
 
         // 浮动交互即时反馈条
         AnimatedVisibility(

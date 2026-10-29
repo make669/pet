@@ -36,6 +36,7 @@ import androidx.compose.ui.window.Dialog
 import com.couple.pet.model.CustomFoodItem
 import com.couple.pet.model.PetFoodManager
 import com.couple.pet.network.PetSyncEngine
+import com.couple.pet.pet.PetRegistry
 import com.couple.pet.ui.theme.PetColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -55,6 +56,7 @@ fun HomeScreen(
     val petStats by PetSyncEngine.petStats.collectAsState()
     val coupleProfile by PetSyncEngine.coupleProfile.collectAsState()
     val activeSlots by PetFoodManager.activeSlots.collectAsState()
+    val activePet by PetRegistry.activePet.collectAsState()
 
     var feedbackTip by remember { mutableStateOf<String?>(null) }
     var feedTrigger by remember { mutableLongStateOf(0L) }
@@ -104,7 +106,7 @@ fun HomeScreen(
             }
 
             Text(
-                text = "🐾 线条小狗伴侣",
+                text = "🐾 ${activePet.speciesName}伴侣",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = PetColors.TextMain
@@ -174,7 +176,7 @@ fun HomeScreen(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = if (isPetFloating) "线条小狗 · 桌面漫步中" else "线条小狗 · 相框小憩中",
+                            text = "${activePet.speciesName} · " + if (isPetFloating) "桌面漫步中" else "相框小憩中",
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                             color = PetColors.TextMain

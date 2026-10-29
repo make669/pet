@@ -52,7 +52,8 @@ data class CoupleProfile(
     val pairCode: String = "PET-520",
     val myNickname: String = "小熊",
     val partnerNickname: String = "小兔",
-    val partnerBattery: Int = 100,
-    val isPartnerCharging: Boolean = false,
-    val isPartnerOnline: Boolean = true
+    val partnerBattery: Int = 88,
+    val isPartnerCharging: Boolean = true,
+    val isPartnerOnline: Boolean = true,
+    val daysTogether: Int = 128
 )

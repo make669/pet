@@ -58,7 +58,8 @@ import com.couple.pet.ui.theme.PetColors
 fun ProfileScreen(
     isPetFloating: Boolean = false,
     onToggleFloatingPet: () -> Unit = {},
-    onOpenPairDialog: () -> Unit = {}
+    onOpenPairDialog: () -> Unit = {},
+    onLogout: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val coupleProfile by PetSyncEngine.coupleProfile.collectAsState()
@@ -194,7 +195,41 @@ fun ProfileScreen(
                 color = PetColors.TextSub
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // 云端登录账户状态胶囊
+            val authState by com.couple.pet.supabase.SupabaseAuthManager.authState.collectAsState()
+            val user = (authState as? com.couple.pet.supabase.AuthState.Authenticated)?.user
+
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = PetColors.SurfaceVariant.copy(alpha = 0.55f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, PetColors.CardBorder),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(14.dp))
+                    .clickable { onLogout() }
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = if (user != null) "☁️ 邮箱: ${user.email}" else "🐾 离线单人游客",
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = PetColors.TextMain
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (user != null) "[切换/退出]" else "[点击登录云端]",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PetColors.Primary
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
 
             // ================= 模块 B：中间大方框容器 (内嵌 5 个矩形条) =================
             Surface(

@@ -30,8 +30,12 @@ import com.couple.pet.model.PetFoodManager
 import com.couple.pet.network.PetSyncEngine
 import com.couple.pet.pet.PetRegistry
 import com.couple.pet.service.PetFloatingService
+import com.couple.pet.supabase.AuthState
+import com.couple.pet.supabase.SupabaseAuthManager
+import com.couple.pet.supabase.SupabaseConfig
 import com.couple.pet.ui.CouplePairDialog
 import com.couple.pet.ui.HomeScreen
+import com.couple.pet.ui.LoginScreen
 import com.couple.pet.ui.ProfileScreen
 import com.couple.pet.ui.ShopScreen
 import com.couple.pet.ui.theme.PetColors
@@ -41,18 +45,29 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        SupabaseConfig.init(this)
+        SupabaseAuthManager.init(this)
         PetSyncEngine.init(this)
         PetFoodManager.init(this)
         com.couple.pet.model.InventoryManager.init(this)
         PetRegistry.init(this)
         setContent {
             MaterialTheme {
-                PetAppRoot(
-                    onCheckPermission = { checkOverlayPermission() },
-                    onRequestPermission = { requestOverlayPermission() },
-                    onStartPet = { startPetService() },
-                    onStopPet = { PetFloatingService.stop(this) }
-                )
+                val authState by SupabaseAuthManager.authState.collectAsState()
+                if (authState is AuthState.Authenticated || authState is AuthState.GuestMode) {
+                    PetAppRoot(
+                        onCheckPermission = { checkOverlayPermission() },
+                        onRequestPermission = { requestOverlayPermission() },
+                        onStartPet = { startPetService() },
+                        onStopPet = { PetFloatingService.stop(this) },
+                        onLogout = { SupabaseAuthManager.signOut() }
+                    )
+                } else {
+                    LoginScreen(
+                        onLoginSuccess = {},
+                        onEnterGuestMode = {}
+                    )
+                }
             }
         }
     }
@@ -91,7 +106,8 @@ fun PetAppRoot(
     onCheckPermission: () -> Boolean,
     onRequestPermission: () -> Unit,
     onStartPet: () -> Unit,
-    onStopPet: () -> Unit
+    onStopPet: () -> Unit,
+    onLogout: () -> Unit = {}
 ) {
     var selectedTab by remember { mutableIntStateOf(0) } // 0: 主页, 1: 商店, 2: 我的
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -161,6 +177,13 @@ fun PetAppRoot(
                     showPairDialog = true
                     coroutineScope.launch { drawerState.close() }
                 }
+
+                DrawerCircleActionRow("☁️", "云端账户 / 切换", Color(0xFFE1F5FE)) {
+                    coroutineScope.launch {
+                        drawerState.close()
+                        onLogout()
+                    }
+                }
             }
         }
     ) {
@@ -224,7 +247,8 @@ fun PetAppRoot(
                     2 -> ProfileScreen(
                         isPetFloating = isPetFloating,
                         onToggleFloatingPet = { toggleFloatingPet() },
-                        onOpenPairDialog = { showPairDialog = true }
+                        onOpenPairDialog = { showPairDialog = true },
+                        onLogout = onLogout
                     )
                 }
             }

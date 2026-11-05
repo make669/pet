@@ -224,9 +224,14 @@ class PetFloatingView(
         invalidate()
     }
 
-    fun showSpeechBubble(text: String, durationTicks: Int = 90) {
+    fun showSpeechBubble(text: String, durationTicks: Int = 120, withHeart: Boolean = false) {
         desktopSpeechBubble = text
         bubbleTicksRemaining = durationTicks
+        if (withHeart) {
+            showHeart = true
+            heartOffsetY = 0f
+        }
+        postInvalidate()
     }
 
     fun onWasteCleanedByOwner() {
@@ -1562,7 +1567,7 @@ class PetFloatingView(
         invalidate()
     }
 
-    private fun triggerSquashAndStretch() {
+    fun triggerSquashAndStretch() {
         val squashAnim = ValueAnimator.ofFloat(0f, 1f).apply {
             duration = 320
             interpolator = OvershootInterpolator(2.5f)

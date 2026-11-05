@@ -1,10 +1,13 @@
 package com.couple.pet.network
 
+import android.content.Context
+import android.content.SharedPreferences
 import com.couple.pet.model.CoupleProfile
 import com.couple.pet.model.PetGrowthStage
 import com.couple.pet.model.PetStats
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -17,13 +20,63 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * 远程实时推送事件
+ * 远程实时推送事件 (情侣双向互动流)
  */
 sealed class RemotePetEvent {
-    data class PartnerPoked(val message: String = "TA 正在想你 ❤️") : RemotePetEvent()
-    data class PartnerFed(val foodName: String, val newHunger: Int) : RemotePetEvent()
-    data class PartnerBathed(val newClean: Int) : RemotePetEvent()
-    data class PartnerBatteryChanged(val batteryLevel: Int, val isCharging: Boolean) : RemotePetEvent()
+    data class PartnerPoked(
+        val partnerName: String = "TA",
+        val message: String = "TA 正在想你 ❤️"
+    ) : RemotePetEvent() {
+        constructor(message: String) : this("TA", message)
+    }
+
+    data class PartnerFed(
+        val partnerName: String = "TA",
+        val foodName: String = "小鱼干",
+        val newHunger: Int = 100
+    ) : RemotePetEvent() {
+        constructor(foodName: String, newHunger: Int) : this("TA", foodName, newHunger)
+    }
+
+    data class PartnerBathed(
+        val partnerName: String = "TA",
+        val newClean: Int = 100
+    ) : RemotePetEvent() {
+        constructor(newClean: Int) : this("TA", newClean)
+    }
+
+    data class PartnerCleanedWaste(
+        val partnerName: String = "TA",
+        val isPoop: Boolean = true,
+        val coinsEarned: Int = 15
+    ) : RemotePetEvent()
+
+    data class PartnerNoteUpdated(
+        val partnerName: String = "TA",
+        val note: String = ""
+    ) : RemotePetEvent()
+
+    data class PartnerBatteryChanged(
+        val batteryLevel: Int,
+        val isCharging: Boolean
+    ) : RemotePetEvent()
+
+    data class PartnerWasteSpawned(
+        val isPoop: Boolean = true,
+        val x: Float = 0f
+    ) : RemotePetEvent()
+}
+
+/**
+ * 伴侣模拟操作类型 (用于单机/离线环境快速连线验证)
+ */
+enum class PartnerActionType {
+    POKE,        // TA 隔空拍一拍
+    FEED,        // TA 远程投喂美食
+    BATH,        // TA 远程洗香香
+    CLEAN_POOP,  // TA 远程帮忙铲屎打扫
+    NOTE,        // TA 悄悄更新桌面便签
+    BATTERY      // TA 手机电量变动
 }
 
 data class FloorWaste(
@@ -38,7 +91,25 @@ data class FloorWaste(
  */
 object PetSyncEngine {
 
+    private const val PREFS_NAME = "pet_couple_sync_prefs_v1"
+    private const val KEY_IS_PAIRED = "is_paired"
+    private const val KEY_PAIR_CODE = "pair_code"
+    private const val KEY_MY_NICK = "my_nickname"
+    private const val KEY_PARTNER_NICK = "partner_nickname"
+    private const val KEY_PARTNER_BATTERY = "partner_battery"
+    private const val KEY_PARTNER_CHARGING = "partner_charging"
+    private const val KEY_DAYS_TOGETHER = "days_together"
+    private const val KEY_DESK_NOTE = "desk_note"
+    private const val KEY_COINS = "pet_coins"
+    private const val KEY_LEVEL = "pet_level"
+    private const val KEY_EXP = "pet_exp"
+    private const val KEY_HUNGER = "pet_hunger"
+    private const val KEY_MOOD = "pet_mood"
+    private const val KEY_CLEAN = "pet_clean"
+
+    private var prefs: SharedPreferences? = null
     private val engineScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private var heartbeatJob: Job? = null
 
     private val _petStats = MutableStateFlow(PetStats())
     val petStats: StateFlow<PetStats> = _petStats.asStateFlow()
@@ -55,12 +126,143 @@ object PetSyncEngine {
     private val _poopDemoTrigger = MutableStateFlow(0L)
     val poopDemoTrigger: StateFlow<Long> = _poopDemoTrigger.asStateFlow()
 
+    private val _remoteEvents = MutableSharedFlow<RemotePetEvent>(extraBufferCapacity = 64)
+    val remoteEvents: SharedFlow<RemotePetEvent> = _remoteEvents.asSharedFlow()
+
+    init {
+        // 开启后台活力衰减引擎（每 30 秒消耗 1 点体力/心情/清洁度）
+        engineScope.launch {
+            while (isActive) {
+                delay(30_000L)
+                decayStats()
+            }
+        }
+    }
+
+    /**
+     * 初始化引擎并加载本地持久化状态
+     */
+    fun init(context: Context) {
+        if (prefs != null) return
+        prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        loadData()
+        startCompanionHeartbeat()
+    }
+
+    private fun loadData() {
+        val p = prefs ?: return
+        val isPaired = p.getBoolean(KEY_IS_PAIRED, false)
+        val pairCode = p.getString(KEY_PAIR_CODE, "PET-520") ?: "PET-520"
+        val myNick = p.getString(KEY_MY_NICK, "小熊") ?: "小熊"
+        val partnerNick = p.getString(KEY_PARTNER_NICK, "小兔") ?: "小兔"
+        val partnerBat = p.getInt(KEY_PARTNER_BATTERY, 88)
+        val partnerCharging = p.getBoolean(KEY_PARTNER_CHARGING, true)
+        val days = p.getInt(KEY_DAYS_TOGETHER, 128)
+
+        _coupleProfile.value = CoupleProfile(
+            isPaired = isPaired,
+            pairCode = pairCode,
+            myNickname = myNick,
+            partnerNickname = partnerNick,
+            partnerBattery = partnerBat,
+            isPartnerCharging = partnerCharging,
+            isPartnerOnline = isPaired,
+            daysTogether = days
+        )
+
+        val note = p.getString(KEY_DESK_NOTE, "记得多喝水，小狗会一直陪着你哦 ❤️") ?: "记得多喝水，小狗会一直陪着你哦 ❤️"
+        _deskNote.value = note
+
+        val coins = p.getInt(KEY_COINS, 120)
+        val level = p.getInt(KEY_LEVEL, 1)
+        val exp = p.getInt(KEY_EXP, 0)
+        val hunger = p.getInt(KEY_HUNGER, 85)
+        val mood = p.getInt(KEY_MOOD, 90)
+        val clean = p.getInt(KEY_CLEAN, 95)
+        val stage = when {
+            level >= 10 -> PetGrowthStage.ADULT
+            level >= 5 -> PetGrowthStage.JUVENILE
+            else -> PetGrowthStage.BABY
+        }
+        _petStats.value = PetStats(
+            hunger = hunger,
+            mood = mood,
+            clean = clean,
+            coins = coins,
+            level = level,
+            exp = exp,
+            maxExp = (level * 100).coerceAtLeast(100),
+            stage = stage
+        )
+    }
+
+    private fun saveProfile() {
+        prefs?.edit()?.apply {
+            val prof = _coupleProfile.value
+            putBoolean(KEY_IS_PAIRED, prof.isPaired)
+            putString(KEY_PAIR_CODE, prof.pairCode)
+            putString(KEY_MY_NICK, prof.myNickname)
+            putString(KEY_PARTNER_NICK, prof.partnerNickname)
+            putInt(KEY_PARTNER_BATTERY, prof.partnerBattery)
+            putBoolean(KEY_PARTNER_CHARGING, prof.isPartnerCharging)
+            putInt(KEY_DAYS_TOGETHER, prof.daysTogether)
+            apply()
+        }
+    }
+
+    private fun saveDeskNote() {
+        prefs?.edit()?.putString(KEY_DESK_NOTE, _deskNote.value)?.apply()
+    }
+
+    private fun saveStats() {
+        prefs?.edit()?.apply {
+            val s = _petStats.value
+            putInt(KEY_COINS, s.coins)
+            putInt(KEY_LEVEL, s.level)
+            putInt(KEY_EXP, s.exp)
+            putInt(KEY_HUNGER, s.hunger)
+            putInt(KEY_MOOD, s.mood)
+            putInt(KEY_CLEAN, s.clean)
+            apply()
+        }
+    }
+
+    private fun startCompanionHeartbeat() {
+        heartbeatJob?.cancel()
+        heartbeatJob = engineScope.launch {
+            while (isActive) {
+                delay(60_000L) // 伴侣定期在线脉冲感知
+                if (_coupleProfile.value.isPaired) {
+                    val prof = _coupleProfile.value
+                    val currentBat = prof.partnerBattery
+                    val delta = if (prof.isPartnerCharging) 1 else -1
+                    val newBat = (currentBat + delta).coerceIn(20, 100)
+                    _coupleProfile.value = prof.copy(
+                        partnerBattery = newBat,
+                        isPartnerOnline = true,
+                        lastSyncTime = System.currentTimeMillis()
+                    )
+                    saveProfile()
+                }
+            }
+        }
+    }
+
     fun triggerPoopDemo() {
         _poopDemoTrigger.value = System.currentTimeMillis()
     }
 
     fun updateDeskNote(note: String) {
         _deskNote.value = note.trim().ifBlank { "今天也要元气满满呀 🐾" }
+        saveDeskNote()
+        if (_coupleProfile.value.isPaired) {
+            _remoteEvents.tryEmit(
+                RemotePetEvent.PartnerNoteUpdated(
+                    partnerName = _coupleProfile.value.myNickname,
+                    note = _deskNote.value
+                )
+            )
+        }
     }
 
     /**
@@ -77,6 +279,7 @@ object PetSyncEngine {
         // 发生排泄，清洁度扣减 15 点
         val stats = _petStats.value
         _petStats.value = stats.copy(clean = (stats.clean - 15).coerceAtLeast(10))
+        saveStats()
     }
 
     /**
@@ -93,6 +296,7 @@ object PetSyncEngine {
             exp = newExp,
             coins = newCoins
         )
+        saveStats()
     }
 
     /**
@@ -102,19 +306,7 @@ object PetSyncEngine {
         _floorWastes.value = emptyList()
         val stats = _petStats.value
         _petStats.value = stats.copy(clean = 100, mood = (stats.mood + 15).coerceAtMost(100))
-    }
-
-    private val _remoteEvents = MutableSharedFlow<RemotePetEvent>(extraBufferCapacity = 64)
-    val remoteEvents: SharedFlow<RemotePetEvent> = _remoteEvents.asSharedFlow()
-
-    init {
-        // 开启后台活力衰减引擎（每 30 秒消耗 1 点体力/心情/清洁度）
-        engineScope.launch {
-            while (isActive) {
-                delay(30_000L)
-                decayStats()
-            }
-        }
+        saveStats()
     }
 
     /**
@@ -144,7 +336,14 @@ object PetSyncEngine {
             clean = updatedClean
         )
         _petStats.value = updatedStats
-        _remoteEvents.tryEmit(RemotePetEvent.PartnerFed(name, updatedHunger))
+        saveStats()
+        _remoteEvents.tryEmit(
+            RemotePetEvent.PartnerFed(
+                partnerName = _coupleProfile.value.myNickname,
+                foodName = name,
+                newHunger = updatedHunger
+            )
+        )
     }
 
     /**
@@ -156,7 +355,13 @@ object PetSyncEngine {
             clean = 100
         )
         _petStats.value = updatedStats
-        _remoteEvents.tryEmit(RemotePetEvent.PartnerBathed(100))
+        saveStats()
+        _remoteEvents.tryEmit(
+            RemotePetEvent.PartnerBathed(
+                partnerName = _coupleProfile.value.myNickname,
+                newClean = 100
+            )
+        )
     }
 
     /**
@@ -171,22 +376,71 @@ object PetSyncEngine {
             coins = current.coins + coinBonus
         )
         _petStats.value = updatedStats
-        _remoteEvents.tryEmit(RemotePetEvent.PartnerPoked("摸了摸宠物头顶 ❤️"))
+        saveStats()
+        _remoteEvents.tryEmit(
+            RemotePetEvent.PartnerPoked(
+                partnerName = _coupleProfile.value.myNickname,
+                message = "摸了摸宠物头顶 ❤️"
+            )
+        )
     }
 
     /**
-     * 绑定配对码
+     * 隔空给 TA 拍一拍
      */
-    fun pairWithCode(code: String): Boolean {
+    fun sendPokeToPartner() {
+        poke()
+        if (_coupleProfile.value.isPaired) {
+            _remoteEvents.tryEmit(
+                RemotePetEvent.PartnerPoked(
+                    partnerName = _coupleProfile.value.myNickname,
+                    message = "${_coupleProfile.value.myNickname} 拍了拍 ${_coupleProfile.value.partnerNickname} ❤️"
+                )
+            )
+        }
+    }
+
+    /**
+     * 绑定配对码并建立双人连线
+     */
+    fun pairWithCode(
+        code: String,
+        myNick: String = "小熊",
+        partnerNick: String = "小兔"
+    ): Boolean {
         val cleanCode = code.trim().uppercase()
         if (cleanCode.length >= 4) {
             _coupleProfile.value = _coupleProfile.value.copy(
                 isPaired = true,
-                pairCode = cleanCode
+                pairCode = cleanCode,
+                myNickname = myNick.ifBlank { "小熊" },
+                partnerNickname = partnerNick.ifBlank { "小兔" },
+                isPartnerOnline = true,
+                lastSyncTime = System.currentTimeMillis()
+            )
+            saveProfile()
+
+            // 连线成功发射专属连线欢迎事件
+            _remoteEvents.tryEmit(
+                RemotePetEvent.PartnerPoked(
+                    partnerName = _coupleProfile.value.partnerNickname,
+                    message = "${_coupleProfile.value.partnerNickname} 与你甜蜜连线成功！共同领养了小萌宠 ❤️"
+                )
             )
             return true
         }
         return false
+    }
+
+    /**
+     * 解除配对
+     */
+    fun unpair() {
+        _coupleProfile.value = _coupleProfile.value.copy(
+            isPaired = false,
+            isPartnerOnline = false
+        )
+        saveProfile()
     }
 
     /**
@@ -197,6 +451,7 @@ object PetSyncEngine {
             myNickname = myNick.trim().ifBlank { "小熊" },
             partnerNickname = partnerNick.trim().ifBlank { "小兔" }
         )
+        saveProfile()
     }
 
     /**
@@ -206,6 +461,78 @@ object PetSyncEngine {
         _coupleProfile.value = _coupleProfile.value.copy(
             daysTogether = days.coerceAtLeast(1)
         )
+        saveProfile()
+    }
+
+    /**
+     * 模拟 TA 实时互动 (方便单人开发环境或测试一键闭环检验)
+     */
+    fun simulatePartnerAction(type: PartnerActionType, customMsg: String? = null) {
+        val partner = _coupleProfile.value.partnerNickname
+        when (type) {
+            PartnerActionType.POKE -> {
+                val msg = customMsg ?: "${partner} 隔空戳了戳你的小脸蛋 ❤️"
+                val stats = _petStats.value
+                _petStats.value = addExpAndCheckLevelUp(stats, 5).copy(
+                    mood = (stats.mood + 10).coerceAtMost(100)
+                )
+                saveStats()
+                _remoteEvents.tryEmit(RemotePetEvent.PartnerPoked(partner, msg))
+            }
+            PartnerActionType.FEED -> {
+                val food = customMsg ?: "大鸡腿 🍗"
+                val stats = _petStats.value
+                val newHunger = (stats.hunger + 20).coerceAtMost(100)
+                val newMood = (stats.mood + 10).coerceAtMost(100)
+                _petStats.value = addExpAndCheckLevelUp(stats, 10).copy(
+                    hunger = newHunger,
+                    mood = newMood
+                )
+                saveStats()
+                _remoteEvents.tryEmit(RemotePetEvent.PartnerFed(partner, food, newHunger))
+            }
+            PartnerActionType.BATH -> {
+                val stats = _petStats.value
+                _petStats.value = addExpAndCheckLevelUp(stats, 10).copy(
+                    clean = 100,
+                    mood = (stats.mood + 10).coerceAtMost(100)
+                )
+                cleanAllWaste()
+                saveStats()
+                _remoteEvents.tryEmit(RemotePetEvent.PartnerBathed(partner, 100))
+            }
+            PartnerActionType.CLEAN_POOP -> {
+                val wastes = _floorWastes.value
+                val isPoop = wastes.firstOrNull()?.isPoop ?: true
+                cleanAllWaste()
+                val stats = _petStats.value
+                val newCoins = stats.coins + 15
+                _petStats.value = addExpAndCheckLevelUp(stats, 15).copy(
+                    clean = 100,
+                    coins = newCoins,
+                    mood = (stats.mood + 10).coerceAtMost(100)
+                )
+                saveStats()
+                _remoteEvents.tryEmit(RemotePetEvent.PartnerCleanedWaste(partner, isPoop = isPoop, coinsEarned = 15))
+            }
+            PartnerActionType.NOTE -> {
+                val note = customMsg ?: "【${partner}】今天也超级想你，晚上吃好吃的呀 🐾"
+                _deskNote.value = note
+                saveDeskNote()
+                _remoteEvents.tryEmit(RemotePetEvent.PartnerNoteUpdated(partner, note))
+            }
+            PartnerActionType.BATTERY -> {
+                val currentBat = _coupleProfile.value.partnerBattery
+                val newBat = if (currentBat >= 95) 75 else (currentBat + 7).coerceAtMost(100)
+                val charging = !_coupleProfile.value.isPartnerCharging
+                _coupleProfile.value = _coupleProfile.value.copy(
+                    partnerBattery = newBat,
+                    isPartnerCharging = charging
+                )
+                saveProfile()
+                _remoteEvents.tryEmit(RemotePetEvent.PartnerBatteryChanged(newBat, charging))
+            }
+        }
     }
 
     /**
@@ -217,6 +544,7 @@ object PetSyncEngine {
         val current = _petStats.value
         if (current.coins >= amount) {
             _petStats.value = current.copy(coins = current.coins - amount)
+            saveStats()
             return true
         }
         return false
@@ -229,6 +557,7 @@ object PetSyncEngine {
         if (amount <= 0) return
         val current = _petStats.value
         _petStats.value = current.copy(coins = current.coins + amount)
+        saveStats()
     }
 
     /**
@@ -269,5 +598,6 @@ object PetSyncEngine {
             mood = (current.mood - 1).coerceAtLeast(0),
             clean = (current.clean - 1).coerceAtLeast(0)
         )
+        saveStats()
     }
 }

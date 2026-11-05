@@ -162,6 +162,57 @@ fun PolaroidPuppyViewport(
         }
     }
 
+    // 观察情侣远程同步事件并展示相框爱心动效与心声
+    LaunchedEffect(Unit) {
+        PetSyncEngine.remoteEvents.collect { event ->
+            if (isPetFloating) return@collect
+            when (event) {
+                is com.couple.pet.network.RemotePetEvent.PartnerPoked -> {
+                    behavior = FramePuppyBehavior.HAPPY_JUMP
+                    speechBubble = if (event.message.contains(event.partnerName)) event.message else "【${event.partnerName}】${event.message}"
+                    showHeartEffect = true
+                    delay(2500)
+                    showHeartEffect = false
+                    speechBubble = null
+                    behavior = FramePuppyBehavior.WALKING
+                }
+                is com.couple.pet.network.RemotePetEvent.PartnerFed -> {
+                    behavior = FramePuppyBehavior.HAPPY_JUMP
+                    speechBubble = "【${event.partnerName}】投喂了${event.foodName} 🐾"
+                    showHeartEffect = true
+                    delay(2500)
+                    showHeartEffect = false
+                    speechBubble = null
+                    behavior = FramePuppyBehavior.WALKING
+                }
+                is com.couple.pet.network.RemotePetEvent.PartnerBathed -> {
+                    behavior = FramePuppyBehavior.HAPPY_JUMP
+                    speechBubble = "【${event.partnerName}】给小狗洗香香啦 🛁"
+                    showHeartEffect = true
+                    delay(2500)
+                    showHeartEffect = false
+                    speechBubble = null
+                    behavior = FramePuppyBehavior.WALKING
+                }
+                is com.couple.pet.network.RemotePetEvent.PartnerCleanedWaste -> {
+                    behavior = FramePuppyBehavior.HAPPY_JUMP
+                    speechBubble = "【${event.partnerName}】帮忙打扫了便便！金币+15 💕"
+                    showHeartEffect = true
+                    delay(2500)
+                    showHeartEffect = false
+                    speechBubble = null
+                    behavior = FramePuppyBehavior.WALKING
+                }
+                is com.couple.pet.network.RemotePetEvent.PartnerNoteUpdated -> {
+                    speechBubble = "【${event.partnerName}】发来新便签 💌"
+                    delay(2500)
+                    speechBubble = null
+                }
+                else -> {}
+            }
+        }
+    }
+
     // 投喂响应动效 (在相框小狗头顶气泡中温馨呈现，如用户原型图所示)
     LaunchedEffect(feedTrigger) {
         if (feedTrigger > 0L && !isPetFloating && !isBusyWithSequence) {

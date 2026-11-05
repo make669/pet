@@ -51,7 +51,8 @@ import kotlinx.coroutines.launch
 fun HomeScreen(
     onOpenDrawer: () -> Unit,
     isPetFloating: Boolean = false,
-    onToggleFloatingPet: () -> Unit = {}
+    onToggleFloatingPet: () -> Unit = {},
+    onOpenPairDialog: () -> Unit = {}
 ) {
     val petStats by PetSyncEngine.petStats.collectAsState()
     val coupleProfile by PetSyncEngine.coupleProfile.collectAsState()
@@ -66,6 +67,34 @@ fun HomeScreen(
     var showTracksDialog by remember { mutableStateOf(false) }
 
     val coroutineScope = rememberCoroutineScope()
+
+    // 监听情侣远程事件流并弹出温馨浮动通知
+    LaunchedEffect(Unit) {
+        PetSyncEngine.remoteEvents.collect { event ->
+            when (event) {
+                is com.couple.pet.network.RemotePetEvent.PartnerPoked -> {
+                    feedbackTip = "【${event.partnerName}】${event.message}"
+                }
+                is com.couple.pet.network.RemotePetEvent.PartnerFed -> {
+                    feedbackTip = "【${event.partnerName}】远程投喂了${event.foodName} 🐾"
+                }
+                is com.couple.pet.network.RemotePetEvent.PartnerCleanedWaste -> {
+                    feedbackTip = "【${event.partnerName}】帮你打扫了便便！金币+15 💕"
+                }
+                is com.couple.pet.network.RemotePetEvent.PartnerBathed -> {
+                    feedbackTip = "【${event.partnerName}】给小狗洗香香啦 🛁"
+                }
+                is com.couple.pet.network.RemotePetEvent.PartnerNoteUpdated -> {
+                    feedbackTip = "【${event.partnerName}】更新了桌面便签 💌"
+                }
+                else -> {}
+            }
+            if (feedbackTip != null) {
+                delay(2800)
+                feedbackTip = null
+            }
+        }
+    }
 
     // 辅助触发气泡提示
     fun showToast(msg: String) {
@@ -150,11 +179,13 @@ fun HomeScreen(
                         modifier = Modifier
                             .clip(RoundedCornerShape(16.dp))
                             .background(PetColors.PrimaryContainer)
-                            .padding(horizontal = 9.dp, vertical = 5.dp)
+                            .clickable { onOpenPairDialog() }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = if (coupleProfile.isPaired) "💕 双人" else "🐾 单人",
-                            fontSize = 11.sp,
+                            text = if (coupleProfile.isPaired) "💕 ${coupleProfile.partnerNickname} 🔋${coupleProfile.partnerBattery}%${if (coupleProfile.isPartnerCharging) "⚡" else ""}" else "🐾 单人·连线",
+                            fontSize = 10.5.sp,
+                            maxLines = 1,
                             fontWeight = FontWeight.Bold,
                             color = PetColors.Primary
                         )
@@ -292,7 +323,52 @@ fun HomeScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // 情侣双人连线状态便签条 (已连线时常驻展示甜蜜状态)
+        if (coupleProfile.isPaired) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = PetColors.PrimaryContainer.copy(alpha = 0.5f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, PetColors.CardBorder),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .clickable { onOpenPairDialog() }
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("💌", fontSize = 14.sp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = PetSyncEngine.deskNote.collectAsState().value,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = PetColors.TextMain,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "连线中 💕",
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PetColors.Primary
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+        }
 
         // ================= Box 3: 底部自定义食物与互动小餐盘 [ O  O  O ] =================
         Card(

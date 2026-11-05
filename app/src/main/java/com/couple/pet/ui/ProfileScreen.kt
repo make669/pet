@@ -214,11 +214,11 @@ fun ProfileScreen(
                         icon = "💕",
                         title = "情侣专属羁绊",
                         subtitle = if (coupleProfile.isPaired) {
-                            "TA在线 · 🔋${coupleProfile.partnerBattery}% · 码: ${coupleProfile.pairCode}"
+                            "🟢 ${coupleProfile.partnerNickname}在线 🔋${coupleProfile.partnerBattery}%${if (coupleProfile.isPartnerCharging) "⚡" else ""} · 码: ${coupleProfile.pairCode}"
                         } else {
-                            "专属配对码: ${coupleProfile.pairCode} (单人模式)"
+                            "专属配对码: ${coupleProfile.pairCode} (单人模式 · 点此连线)"
                         },
-                        badge = if (coupleProfile.isPaired) "已连线" else "去配对",
+                        badge = if (coupleProfile.isPaired) "已连线 💕" else "去配对",
                         badgeHighlight = !coupleProfile.isPaired,
                         onClick = onOpenPairDialog
                     )

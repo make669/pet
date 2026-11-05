@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import com.couple.pet.model.CoupleProfile
 import com.couple.pet.model.PetGrowthStage
 import com.couple.pet.model.PetStats
+import com.couple.pet.supabase.SupabaseSyncService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -18,6 +19,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 
 /**
  * 远程实时推送事件 (情侣双向互动流)
@@ -129,6 +131,10 @@ object PetSyncEngine {
     private val _remoteEvents = MutableSharedFlow<RemotePetEvent>(extraBufferCapacity = 64)
     val remoteEvents: SharedFlow<RemotePetEvent> = _remoteEvents.asSharedFlow()
 
+    fun emitRemoteEvent(event: RemotePetEvent) {
+        _remoteEvents.tryEmit(event)
+    }
+
     init {
         // 开启后台活力衰减引擎（每 30 秒消耗 1 点体力/心情/清洁度）
         engineScope.launch {
@@ -147,6 +153,9 @@ object PetSyncEngine {
         prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         loadData()
         startCompanionHeartbeat()
+        if (_coupleProfile.value.isPaired) {
+            SupabaseSyncService.subscribeCoupleRealtime(_coupleProfile.value.pairCode)
+        }
     }
 
     private fun loadData() {
@@ -262,6 +271,13 @@ object PetSyncEngine {
                     note = _deskNote.value
                 )
             )
+            SupabaseSyncService.broadcastCoupleAction(
+                _coupleProfile.value.pairCode,
+                "NOTE",
+                JSONObject().apply {
+                    put("note", _deskNote.value)
+                }
+            )
         }
     }
 
@@ -290,13 +306,24 @@ object PetSyncEngine {
         val stats = _petStats.value
         val newExp = stats.exp + 15
         val newCoins = stats.coins + 15 // 铲屎官辛苦津贴 +15 金币
-        _petStats.value = stats.copy(
+        val updated = stats.copy(
             clean = 100,
             mood = (stats.mood + 10).coerceAtMost(100),
             exp = newExp,
             coins = newCoins
         )
+        _petStats.value = updated
         saveStats()
+        if (_coupleProfile.value.isPaired) {
+            SupabaseSyncService.pushPetStatsToCloud(_coupleProfile.value.pairCode, updated)
+            SupabaseSyncService.broadcastCoupleAction(
+                _coupleProfile.value.pairCode,
+                "CLEAN_POOP",
+                JSONObject().apply {
+                    put("is_poop", true)
+                }
+            )
+        }
     }
 
     /**
@@ -305,8 +332,12 @@ object PetSyncEngine {
     fun cleanAllWaste() {
         _floorWastes.value = emptyList()
         val stats = _petStats.value
-        _petStats.value = stats.copy(clean = 100, mood = (stats.mood + 15).coerceAtMost(100))
+        val updated = stats.copy(clean = 100, mood = (stats.mood + 15).coerceAtMost(100))
+        _petStats.value = updated
         saveStats()
+        if (_coupleProfile.value.isPaired) {
+            SupabaseSyncService.pushPetStatsToCloud(_coupleProfile.value.pairCode, updated)
+        }
     }
 
     /**
@@ -344,6 +375,17 @@ object PetSyncEngine {
                 newHunger = updatedHunger
             )
         )
+        if (_coupleProfile.value.isPaired) {
+            SupabaseSyncService.pushPetStatsToCloud(_coupleProfile.value.pairCode, updatedStats)
+            SupabaseSyncService.broadcastCoupleAction(
+                _coupleProfile.value.pairCode,
+                "FEED",
+                JSONObject().apply {
+                    put("food", name)
+                    put("hunger", updatedHunger)
+                }
+            )
+        }
     }
 
     /**
@@ -362,6 +404,16 @@ object PetSyncEngine {
                 newClean = 100
             )
         )
+        if (_coupleProfile.value.isPaired) {
+            SupabaseSyncService.pushPetStatsToCloud(_coupleProfile.value.pairCode, updatedStats)
+            SupabaseSyncService.broadcastCoupleAction(
+                _coupleProfile.value.pairCode,
+                "BATH",
+                JSONObject().apply {
+                    put("clean", 100)
+                }
+            )
+        }
     }
 
     /**
@@ -391,11 +443,20 @@ object PetSyncEngine {
     fun sendPokeToPartner() {
         poke()
         if (_coupleProfile.value.isPaired) {
+            val msg = "${_coupleProfile.value.myNickname} 拍了拍 ${_coupleProfile.value.partnerNickname} ❤️"
             _remoteEvents.tryEmit(
                 RemotePetEvent.PartnerPoked(
                     partnerName = _coupleProfile.value.myNickname,
-                    message = "${_coupleProfile.value.myNickname} 拍了拍 ${_coupleProfile.value.partnerNickname} ❤️"
+                    message = msg
                 )
+            )
+            SupabaseSyncService.pushPetStatsToCloud(_coupleProfile.value.pairCode, _petStats.value)
+            SupabaseSyncService.broadcastCoupleAction(
+                _coupleProfile.value.pairCode,
+                "POKE",
+                JSONObject().apply {
+                    put("message", msg)
+                }
             )
         }
     }
@@ -427,6 +488,7 @@ object PetSyncEngine {
                     message = "${_coupleProfile.value.partnerNickname} 与你甜蜜连线成功！共同领养了小萌宠 ❤️"
                 )
             )
+            SupabaseSyncService.subscribeCoupleRealtime(cleanCode)
             return true
         }
         return false
@@ -441,6 +503,7 @@ object PetSyncEngine {
             isPartnerOnline = false
         )
         saveProfile()
+        SupabaseSyncService.disconnectWebSocket()
     }
 
     /**

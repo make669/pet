@@ -57,6 +57,7 @@ fun HomeScreen(
     val coupleProfile by PetSyncEngine.coupleProfile.collectAsState()
     val activeSlots by PetFoodManager.activeSlots.collectAsState()
     val activePet by PetRegistry.activePet.collectAsState()
+    val inventory by com.couple.pet.model.InventoryManager.inventory.collectAsState()
 
     var feedbackTip by remember { mutableStateOf<String?>(null) }
     var feedTrigger by remember { mutableLongStateOf(0L) }
@@ -368,18 +369,26 @@ fun HomeScreen(
                     val slots = activeSlots.take(3)
                     for (i in 0..2) {
                         val foodItem = slots.getOrNull(i) ?: PetFoodManager.PRESET_LIBRARY[i]
+                        val foodCount = inventory[foodItem.id] ?: 0
                         CircleFoodButton(
                             food = foodItem,
+                            count = foodCount,
                             onClick = {
-                                PetSyncEngine.feedItem(
-                                    name = foodItem.name,
-                                    hungerBoost = foodItem.hungerBoost,
-                                    moodBoost = foodItem.moodBoost,
-                                    cleanBoost = foodItem.cleanBoost
-                                )
-                                lastFedFoodName = foodItem.name
-                                feedTrigger++
-                                // 彻底移除底部悬浮黑条，反馈 100% 呈现在相框宠物头顶的心声气泡中
+                                if (foodCount > 0) {
+                                    val consumed = com.couple.pet.model.InventoryManager.consumeItem(foodItem.id, 1)
+                                    if (consumed) {
+                                        PetSyncEngine.feedItem(
+                                            name = foodItem.name,
+                                            hungerBoost = foodItem.hungerBoost,
+                                            moodBoost = foodItem.moodBoost,
+                                            cleanBoost = foodItem.cleanBoost
+                                        )
+                                        lastFedFoodName = foodItem.name
+                                        feedTrigger++
+                                    }
+                                } else {
+                                    showToast("“${foodItem.name}”已经吃光啦，快去集市补货吧 🛒")
+                                }
                             },
                             onLongClick = {
                                 showCustomizeDialog = true
@@ -622,6 +631,7 @@ private fun CompactStatPill(
 @Composable
 private fun CircleFoodButton(
     food: CustomFoodItem,
+    count: Int,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
@@ -635,25 +645,42 @@ private fun CircleFoodButton(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.scale(scale)
     ) {
-        // 圆圈容器
+        // 外层容器：容纳圆形按钮与右上角数量角标
         Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .size(66.dp)
-                .clip(CircleShape)
-                .background(PetColors.SurfaceVariant.copy(alpha = 0.6f))
-                .border(1.5.dp, PetColors.CardBorder, CircleShape)
-                .clickable {
-                    onClick()
-                }
+            modifier = Modifier.size(68.dp)
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+            // 内层圆形食物触控按钮
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(64.dp)
+                    .align(Alignment.Center)
+                    .clip(CircleShape)
+                    .background(PetColors.SurfaceVariant.copy(alpha = 0.6f))
+                    .border(1.5.dp, PetColors.CardBorder, CircleShape)
+                    .clickable {
+                        onClick()
+                    }
             ) {
                 Text(
                     text = food.emoji,
                     fontSize = 26.sp
+                )
+            }
+
+            // 右上角数量小徽章
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (count > 0) PetColors.Primary else Color(0xFFB0B0B0))
+                    .padding(horizontal = 5.dp, vertical = 1.5.dp)
+            ) {
+                Text(
+                    text = if (count > 0) "x$count" else "0",
+                    fontSize = 8.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
                 )
             }
         }

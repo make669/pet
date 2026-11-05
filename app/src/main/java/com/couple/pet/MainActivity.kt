@@ -41,6 +41,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         PetFoodManager.init(this)
+        com.couple.pet.model.InventoryManager.init(this)
         PetRegistry.init(this)
         setContent {
             MaterialTheme {

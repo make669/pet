@@ -86,10 +86,12 @@ object PetSyncEngine {
         _floorWastes.value = _floorWastes.value.filterNot { it.id == wasteId }
         val stats = _petStats.value
         val newExp = stats.exp + 15
+        val newCoins = stats.coins + 15 // 铲屎官辛苦津贴 +15 金币
         _petStats.value = stats.copy(
             clean = 100,
             mood = (stats.mood + 10).coerceAtMost(100),
-            exp = newExp
+            exp = newExp,
+            coins = newCoins
         )
     }
 
@@ -163,8 +165,10 @@ object PetSyncEngine {
     fun poke() {
         val current = _petStats.value
         val updatedMood = (current.mood + 10).coerceAtMost(100)
+        val coinBonus = if (Math.random() < 0.45) 2 else 0 // 亲密抚摸概率掉落金币
         val updatedStats = addExpAndCheckLevelUp(current, 5).copy(
-            mood = updatedMood
+            mood = updatedMood,
+            coins = current.coins + coinBonus
         )
         _petStats.value = updatedStats
         _remoteEvents.tryEmit(RemotePetEvent.PartnerPoked("摸了摸宠物头顶 ❤️"))
@@ -205,16 +209,41 @@ object PetSyncEngine {
     }
 
     /**
+     * 消费金币
+     * @return true 消费成功，false 余额不足
+     */
+    fun spendCoins(amount: Int): Boolean {
+        if (amount <= 0) return true
+        val current = _petStats.value
+        if (current.coins >= amount) {
+            _petStats.value = current.copy(coins = current.coins - amount)
+            return true
+        }
+        return false
+    }
+
+    /**
+     * 奖励/增加金币
+     */
+    fun addCoins(amount: Int) {
+        if (amount <= 0) return
+        val current = _petStats.value
+        _petStats.value = current.copy(coins = current.coins + amount)
+    }
+
+    /**
      * 经验计算与升级进阶处理
      */
     private fun addExpAndCheckLevelUp(current: PetStats, addExp: Int): PetStats {
         var newExp = current.exp + addExp
         var newLevel = current.level
         var newMaxExp = current.maxExp
+        var bonusCoins = 0
         while (newExp >= newMaxExp) {
             newExp -= newMaxExp
             newLevel++
             newMaxExp = newLevel * 100
+            bonusCoins += newLevel * 50 // 进阶升级大红包
         }
         val newStage = when {
             newLevel >= 10 -> PetGrowthStage.ADULT
@@ -225,7 +254,8 @@ object PetSyncEngine {
             level = newLevel,
             exp = newExp,
             maxExp = newMaxExp,
-            stage = newStage
+            stage = newStage,
+            coins = current.coins + bonusCoins
         )
     }
 

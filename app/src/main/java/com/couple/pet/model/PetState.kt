@@ -37,6 +37,7 @@ data class PetStats(
     val hunger: Int = 85,          // 饱食度 0~100
     val mood: Int = 90,            // 心情值 0~100
     val clean: Int = 95,           // 清洁度 0~100
+    val coins: Int = 120,          // 铲屎官金币资产 (打扫/摸摸/相伴赚取)
     val level: Int = 1,            // 等级
     val exp: Int = 0,              // 当前经验值
     val maxExp: Int = 100,         // 升级所需经验

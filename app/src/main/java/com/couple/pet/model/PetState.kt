@@ -22,7 +22,12 @@ enum class PetMotionState {
     FALLING,            // 松手自由落体
     SULKING,            // 背对画圈生闷气
     EATING,             // 吃东西中
-    SLEEPING            // 夜间深度睡眠
+    SLEEPING,           // 夜间深度睡眠
+    PRANCE_URGENT,      // 憋急小碎步寻隐蔽角落
+    POOPING,            // 屏幕边缘深蹲拱背排便（眼神锁定求保护）
+    PEEING,             // 抬腿撒尿标记领地
+    POST_ZOOMIES,       // 排便一身轻桌面狂欢冲刺
+    BUSTED              // 被主人抓现行瞬间石化
 }
 
 /**

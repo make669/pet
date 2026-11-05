@@ -116,6 +116,21 @@ class PetFloatingView(
         textAlign = Paint.Align.CENTER
     }
 
+    private val bubbleTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = "#1E1E1E".toColorInt()
+        textSize = 12.5f
+        typeface = Typeface.DEFAULT_BOLD
+        textAlign = Paint.Align.CENTER
+    }
+
+    // 生理排泄本能驱动
+    private var bladderUrge: Float = 0f
+    private var lastHandledPoopDemoTrigger: Long = 0L
+    private var eliminationIsPoop: Boolean = true
+    private var zoomiesLapsRemaining: Int = 0
+    private var desktopSpeechBubble: String? = null
+    private var bubbleTicksRemaining: Int = 0
+
     // 2. 状态机与物理属性
     private var motionState: PetMotionState = PetMotionState.IDLE
     private var initialX = 0
@@ -177,6 +192,13 @@ class PetFloatingView(
                 heartOffsetY = (heartOffsetY - 2.0f).coerceAtLeast(-45f)
             }
 
+            if (bubbleTicksRemaining > 0) {
+                bubbleTicksRemaining--
+                if (bubbleTicksRemaining == 0) {
+                    desktopSpeechBubble = null
+                }
+            }
+
             // 更新生物体内在生理数值
             updateBiologicalMetabolism()
 
@@ -202,6 +224,36 @@ class PetFloatingView(
         invalidate()
     }
 
+    fun showSpeechBubble(text: String, durationTicks: Int = 90) {
+        desktopSpeechBubble = text
+        bubbleTicksRemaining = durationTicks
+    }
+
+    fun onWasteCleanedByOwner() {
+        showHeart = true
+        heartOffsetY = 0f
+        showSpeechBubble("小窝干干净净啦！谢谢铲屎官主人 ❤️", 90)
+        triggerSquashAndStretch()
+        invalidate()
+    }
+
+    fun startEliminationSequence(isPoop: Boolean) {
+        if (isDragging) return
+        eliminationIsPoop = isPoop
+        motionState = PetMotionState.PRANCE_URGENT
+        stateTicks = 80 // 约 2.4 秒憋急小碎步寻隐蔽角落
+        showSpeechBubble("急急急！快憋不住啦 😖", 80)
+
+        // 寻找最近的屏幕角落边缘
+        val bounds = getScreenBounds()
+        val toLeft = kotlin.math.abs(currentExactX - bounds.left)
+        val toRight = kotlin.math.abs(currentExactX - bounds.right)
+        targetX = if (toLeft < toRight) bounds.left else bounds.right
+        targetY = bounds.bottom - 15f
+        walkDirection = if (targetX >= currentExactX) 1 else -1
+        currentSpeed = 3.6f
+    }
+
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         handler.removeCallbacks(animRunnable)
@@ -216,10 +268,32 @@ class PetFloatingView(
      * 更新生物内在新陈代谢与生理需求
      */
     private fun updateBiologicalMetabolism() {
+        // 观察外部排泄演示触发
+        val demoTrigger = com.couple.pet.network.PetSyncEngine.poopDemoTrigger.value
+        if (demoTrigger > 0L && demoTrigger != lastHandledPoopDemoTrigger) {
+            lastHandledPoopDemoTrigger = demoTrigger
+            startEliminationSequence(isPoop = true)
+            return
+        }
+
+        // 自然生理排泄需求累积
+        if (motionState != PetMotionState.POOPING &&
+            motionState != PetMotionState.PEEING &&
+            motionState != PetMotionState.PRANCE_URGENT &&
+            motionState != PetMotionState.POST_ZOOMIES &&
+            motionState != PetMotionState.BUSTED) {
+            bladderUrge += 0.04f
+            if (bladderUrge >= 100f && (motionState == PetMotionState.IDLE || motionState == PetMotionState.WALKING)) {
+                bladderUrge = 0f
+                startEliminationSequence(isPoop = Math.random() < 0.6)
+                return
+            }
+        }
+
         when (motionState) {
-            PetMotionState.RUNNING -> energy = (energy - 0.22f).coerceAtLeast(0f)
+            PetMotionState.RUNNING, PetMotionState.POST_ZOOMIES -> energy = (energy - 0.22f).coerceAtLeast(0f)
             PetMotionState.CHASING_TAIL, PetMotionState.DIGGING -> energy = (energy - 0.30f).coerceAtLeast(0f)
-            PetMotionState.WALKING -> energy = (energy - 0.05f).coerceAtLeast(0f)
+            PetMotionState.WALKING, PetMotionState.PRANCE_URGENT -> energy = (energy - 0.05f).coerceAtLeast(0f)
             PetMotionState.NAPPING -> energy = (energy + 0.26f).coerceAtMost(100f) // 瞌睡快速充沛精力
             PetMotionState.IDLE -> energy = (energy + 0.04f).coerceAtMost(100f)
             else -> {}
@@ -539,6 +613,102 @@ class PetFloatingView(
                 }
             }
 
+            // 12. 憋急小碎步寻隐蔽角落
+            PetMotionState.PRANCE_URGENT -> {
+                stateTicks--
+                val dx = targetX - currentExactX
+                val dy = targetY - currentExactY
+                val dist = hypot(dx.toDouble(), dy.toDouble()).toFloat()
+                if (dist > 10f) {
+                    val stepX = (dx / dist) * currentSpeed
+                    val stepY = (dy / dist) * currentSpeed
+                    if (!stepX.isNaN() && !stepY.isNaN()) {
+                        currentExactX = (currentExactX + stepX).coerceIn(bounds.left, bounds.right)
+                        currentExactY = (currentExactY + stepY).coerceIn(bounds.top, bounds.bottom)
+                        walkDirection = if (dx >= 0) 1 else -1
+                        layoutParams.x = currentExactX.toInt()
+                        layoutParams.y = currentExactY.toInt()
+                        try { windowManager.updateViewLayout(this, layoutParams) } catch (_: Exception) {}
+                    }
+                }
+
+                if (stateTicks <= 0) {
+                    if (eliminationIsPoop) {
+                        motionState = PetMotionState.POOPING
+                        stateTicks = 85 // 拱背深蹲约 2.6 秒
+                        showSpeechBubble("主人看好我，别让坏人过来... 🥺", 85)
+                    } else {
+                        motionState = PetMotionState.PEEING
+                        stateTicks = 75 // 抬腿撒尿标记约 2.3 秒
+                        showSpeechBubble("抬腿标记！这里归我守护 🐾", 75)
+                    }
+                }
+            }
+
+            // 13. 屏幕边缘深蹲拱背排便（眼神锁定求保护）
+            PetMotionState.POOPING -> {
+                stateTicks--
+                if (stateTicks <= 0) {
+                    // 落地排泄物小徽章
+                    val wasteX = if (walkDirection == 1) layoutParams.x - 25 else layoutParams.x + 135
+                    val wasteY = layoutParams.y + 115
+                    com.couple.pet.service.PetFloatingService.getInstance()?.spawnDesktopWaste(wasteX, wasteY, isPoop = true)
+
+                    // 开启拉后一身轻疯狂冲刺 (Zoomies)
+                    motionState = PetMotionState.POST_ZOOMIES
+                    zoomiesLapsRemaining = 3
+                    targetX = if (walkDirection == 1) bounds.left else bounds.right
+                    walkDirection = if (targetX >= currentExactX) 1 else -1
+                    currentSpeed = 8.5f
+                    showSpeechBubble("拉完啦！一身轻松冲冲冲 💨💨", 90)
+                }
+            }
+
+            // 14. 抬腿撒尿标记领地
+            PetMotionState.PEEING -> {
+                stateTicks--
+                if (stateTicks <= 0) {
+                    val wasteX = if (walkDirection == 1) layoutParams.x - 20 else layoutParams.x + 125
+                    val wasteY = layoutParams.y + 115
+                    com.couple.pet.service.PetFloatingService.getInstance()?.spawnDesktopWaste(wasteX, wasteY, isPoop = false)
+
+                    motionState = PetMotionState.IDLE
+                    idleTicks = 0
+                    restDuration = 40
+                }
+            }
+
+            // 15. 拉完一身轻全屏疯狂冲刺 (Zoomies)
+            PetMotionState.POST_ZOOMIES -> {
+                val dx = targetX - currentExactX
+                if (abs(dx) > 20f) {
+                    val step = (if (targetX >= currentExactX) 1f else -1f) * currentSpeed
+                    currentExactX = (currentExactX + step).coerceIn(bounds.left, bounds.right)
+                    layoutParams.x = currentExactX.toInt()
+                    try { windowManager.updateViewLayout(this, layoutParams) } catch (_: Exception) {}
+                } else {
+                    zoomiesLapsRemaining--
+                    if (zoomiesLapsRemaining > 0) {
+                        targetX = if (targetX <= bounds.left + 20f) bounds.right else bounds.left
+                        walkDirection = if (targetX >= currentExactX) 1 else -1
+                    } else {
+                        motionState = PetMotionState.IDLE
+                        idleTicks = 0
+                        restDuration = 45
+                        desktopSpeechBubble = null
+                    }
+                }
+            }
+
+            // 16. 抓现行瞬间石化定格
+            PetMotionState.BUSTED -> {
+                stateTicks--
+                if (stateTicks <= 0) {
+                    motionState = PetMotionState.WALKING
+                    desktopSpeechBubble = null
+                }
+            }
+
             else -> {
                 motionState = PetMotionState.IDLE
                 idleTicks = 0
@@ -553,7 +723,7 @@ class PetFloatingView(
         val centerX = w / 2f
         val centerY = h / 2f + 5f
 
-        val isRunning = motionState == PetMotionState.RUNNING
+        val isRunning = motionState == PetMotionState.RUNNING || motionState == PetMotionState.POST_ZOOMIES
         val isWalking = motionState == PetMotionState.WALKING
         val isSniffing = motionState == PetMotionState.SNIFFING
         val isShaking = motionState == PetMotionState.SHAKING
@@ -567,11 +737,21 @@ class PetFloatingView(
         val isBegging = motionState == PetMotionState.BEGGING
         val isBellyUp = motionState == PetMotionState.BELLY_UP
         val isDragged = motionState == PetMotionState.DRAGGED
+        val isPrancing = motionState == PetMotionState.PRANCE_URGENT
+        val isPooping = motionState == PetMotionState.POOPING
+        val isPeeing = motionState == PetMotionState.PEEING
+        val isBusted = motionState == PetMotionState.BUSTED
+        val isPostZoomies = motionState == PetMotionState.POST_ZOOMIES
 
         // 垂直起伏或生物动作偏移
         val motionOffsetY = when {
+            isPostZoomies -> -abs(sin(tick * 0.65).toFloat()) * 10f
             isRunning -> -abs(sin(tick * 0.52).toFloat()) * 8.5f // 活泼的大跨步跃起
             isWalking -> sin(tick * 0.24).toFloat() * 2.2f       // 悠闲温和微晃
+            isPrancing -> sin(tick * 0.8).toFloat() * 3.5f       // 憋急小碎步微颠
+            isPooping -> 8.5f + sin(tick * 0.6).toFloat() * 0.8f // 拱背深蹲下沉
+            isPeeing -> 3.5f
+            isBusted -> sin(tick * 1.5).toFloat() * 1.2f         // 僵硬定格微颤
             isSniffing -> 4.5f + sin(tick * 0.6).toFloat() * 1.5f // 低头嗅闻微耸动
             isNapping -> 7.0f + sin(tick * 0.08).toFloat() * 2.2f // 趴睡沉稳呼吸
             isStretching -> 3.0f                                  // 伸懒腰伏地
@@ -583,8 +763,13 @@ class PetFloatingView(
 
         // 身体前倾倾角
         val bodyTiltAngle = when {
+            isPostZoomies -> 14.0f * walkDirection               // 极速俯冲
             isRunning -> 7.0f * walkDirection
             isWalking -> sin(tick * 0.24).toFloat() * 4.5f * walkDirection
+            isPrancing -> sin(tick * 0.4).toFloat() * 5.0f * walkDirection
+            isPeeing -> -8.0f * walkDirection                    // 抬腿撒尿侧倾
+            isPooping -> 4.0f * walkDirection                    // 拱背微倾
+            isBusted -> 0f                                       // 石化定格
             isSniffing -> 8.5f * walkDirection
             isDigging -> 13.0f * walkDirection // 刨坑前倾
             isStretching -> -16.0f * walkDirection // 伸懒腰翘臀
@@ -607,6 +792,10 @@ class PetFloatingView(
         } else if (isNapping) {
             // 趴睡时压扁成软乎乎的小肉卷
             dynamicScaleX *= 1.12f
+            dynamicScaleY *= 0.88f
+        } else if (isPooping) {
+            // 拱背深蹲挤压
+            dynamicScaleX *= 1.08f
             dynamicScaleY *= 0.88f
         }
 
@@ -675,6 +864,47 @@ class PetFloatingView(
         if (showHeart) {
             drawFloatingHeart(canvas, centerX, centerY - 60f + heartOffsetY)
         }
+
+        // 4. 生理与心理状态对话气泡
+        if (desktopSpeechBubble != null && bubbleTicksRemaining > 0) {
+            drawSpeechBubble(canvas, centerX, centerY - 54f, desktopSpeechBubble!!)
+        }
+    }
+
+    /**
+     * 绘制萌系对话气泡（手绘圆角线框 + 指向小狗的小尾巴）
+     */
+    private fun drawSpeechBubble(canvas: Canvas, cx: Float, topY: Float, text: String) {
+        val textWidth = bubbleTextPaint.measureText(text)
+        val padH = 10f
+        val bubbleW = (textWidth + padH * 2f).coerceAtMost(226f)
+        val bubbleH = 26f
+        val bubbleLeft = (cx - bubbleW / 2f).coerceIn(6f, width - 6f - bubbleW)
+        val bubbleRight = bubbleLeft + bubbleW
+        val bubbleTop = (topY - bubbleH).coerceAtLeast(4f)
+        val bubbleBottom = bubbleTop + bubbleH
+
+        val rect = RectF(bubbleLeft, bubbleTop, bubbleRight, bubbleBottom)
+        canvas.drawRoundRect(rect, 10f, 10f, bubbleBgPaint)
+        canvas.drawRoundRect(rect, 10f, 10f, fineStrokePaint)
+
+        // 向下尖角小尾巴
+        val arrowX = cx.coerceIn(bubbleLeft + 14f, bubbleRight - 14f)
+        val arrowY = bubbleBottom
+        val tailP = Path().apply {
+            moveTo(arrowX - 4f, arrowY)
+            lineTo(arrowX, arrowY + 5f)
+            lineTo(arrowX + 4f, arrowY)
+            close()
+        }
+        canvas.drawPath(tailP, bubbleBgPaint)
+        canvas.drawLine(arrowX - 4f, arrowY, arrowX, arrowY + 5f, fineStrokePaint)
+        canvas.drawLine(arrowX, arrowY + 5f, arrowX + 4f, arrowY, fineStrokePaint)
+
+        // 居中文本渲染
+        val fm = bubbleTextPaint.fontMetrics
+        val textY = bubbleTop + (bubbleH - (fm.descent + fm.ascent)) / 2f
+        canvas.drawText(text, (bubbleLeft + bubbleRight) / 2f, textY, bubbleTextPaint)
     }
 
     /**
@@ -782,7 +1012,12 @@ class PetFloatingView(
 
         // 尾巴生理反馈：快跑螺旋桨，求摸摸地面拍打，被拎起夹紧收拢
         val tailAngle = when (motionState) {
+            PetMotionState.POST_ZOOMIES -> sin(tick * 1.1).toFloat() * 45f // 狂欢极速甩尾
             PetMotionState.RUNNING -> sin(tick * 0.72).toFloat() * 36f
+            PetMotionState.POOPING -> -42f                                  // 拱背排便尾巴高高翘起卷着
+            PetMotionState.PEEING -> -35f + sin(tick * 0.2).toFloat() * 4f // 撒尿尾巴高扬微颤
+            PetMotionState.PRANCE_URGENT -> -20f + sin(tick * 0.8).toFloat() * 15f // 憋急夹尾小幅摆动
+            PetMotionState.BUSTED -> 0f                                     // 石化完全僵直
             PetMotionState.BEGGING -> sin(tick * 0.85).toFloat() * 26f // 兴奋扫地
             PetMotionState.DRAGGED -> -55f                             // 夹尾巴
             PetMotionState.WALKING -> sin(tick * 0.24).toFloat() * 20f
@@ -822,23 +1057,46 @@ class PetFloatingView(
         canvas.drawPath(bodyPath, furPaint)
         canvas.drawPath(bodyPath, strokePaint)
 
-        // 四肢生理本能微动：被拎起空中扑腾 (Air-Paddling) / 奔跑大步倒腾 / 挠痒抬后腿
-        val legStride = when (motionState) {
-            PetMotionState.RUNNING -> sin(tick * 0.52).toFloat() * 7.5f
-            PetMotionState.WALKING -> sin(tick * 0.24).toFloat() * 3.5f
-            PetMotionState.DRAGGED -> sin(tick * 0.65).toFloat() * 6.5f // 慌乱扑腾爪爪
-            PetMotionState.BELLY_UP -> sin(tick * 0.55).toFloat() * 5.0f
-            else -> 0f
+        // 四肢生理本能微动：被拎起空中扑腾 (Air-Paddling) / 奔跑大步倒腾 / 挠痒抬后腿 / 抬腿撒尿
+        if (motionState == PetMotionState.PEEING) {
+            // 抬起一条后腿撒尿标记
+            canvas.save()
+            val liftLegX = cx - 18f
+            canvas.rotate(-38f, liftLegX, bodyY + 22f)
+            canvas.drawRoundRect(liftLegX - 3.5f, bodyY + 10f, liftLegX + 3.5f, bodyY + 28f, 3f, 3f, furPaint)
+            canvas.drawRoundRect(liftLegX - 3.5f, bodyY + 10f, liftLegX + 3.5f, bodyY + 28f, 3f, 3f, strokePaint)
+            canvas.restore()
+
+            // 另一条支撑后腿与前腿
+            canvas.drawCircle(cx - 8f, bodyY + 26f, 4.8f, furPaint)
+            canvas.drawCircle(cx - 8f, bodyY + 26f, 4.8f, strokePaint)
+
+            canvas.drawCircle(cx + 18f, bodyY + 26f, 4.8f, furPaint)
+            canvas.drawCircle(cx + 18f, bodyY + 26f, 4.8f, strokePaint)
+
+            // 小水滴飞溅微粒
+            canvas.drawCircle(cx - 28f, bodyY + 24f, 1.8f, fineStrokePaint)
+            canvas.drawCircle(cx - 34f, bodyY + 28f, 1.4f, fineStrokePaint)
+        } else {
+            val legStride = when (motionState) {
+                PetMotionState.POST_ZOOMIES -> sin(tick * 0.72).toFloat() * 9.0f
+                PetMotionState.RUNNING -> sin(tick * 0.52).toFloat() * 7.5f
+                PetMotionState.WALKING -> sin(tick * 0.24).toFloat() * 3.5f
+                PetMotionState.PRANCE_URGENT -> sin(tick * 0.85).toFloat() * 4.5f
+                PetMotionState.DRAGGED -> sin(tick * 0.65).toFloat() * 6.5f // 慌乱扑腾爪爪
+                PetMotionState.BELLY_UP -> sin(tick * 0.55).toFloat() * 5.0f
+                else -> 0f
+            }
+
+            val scratchY = if (motionState == PetMotionState.SCRATCHING) sin(tick * 1.5).toFloat() * 8f - 8f else 0f
+
+            // 后腿与前腿
+            canvas.drawCircle(cx - 18f - legStride * 0.4f, bodyY + 26f + legStride + scratchY, 4.8f, furPaint)
+            canvas.drawCircle(cx - 18f - legStride * 0.4f, bodyY + 26f + legStride + scratchY, 4.8f, strokePaint)
+
+            canvas.drawCircle(cx + 18f + legStride * 0.4f, bodyY + 26f - legStride, 4.8f, furPaint)
+            canvas.drawCircle(cx + 18f + legStride * 0.4f, bodyY + 26f - legStride, 4.8f, strokePaint)
         }
-
-        val scratchY = if (motionState == PetMotionState.SCRATCHING) sin(tick * 1.5).toFloat() * 8f - 8f else 0f
-
-        // 后腿与前腿
-        canvas.drawCircle(cx - 18f - legStride * 0.4f, bodyY + 26f + legStride + scratchY, 4.8f, furPaint)
-        canvas.drawCircle(cx - 18f - legStride * 0.4f, bodyY + 26f + legStride + scratchY, 4.8f, strokePaint)
-
-        canvas.drawCircle(cx + 18f + legStride * 0.4f, bodyY + 26f - legStride, 4.8f, furPaint)
-        canvas.drawCircle(cx + 18f + legStride * 0.4f, bodyY + 26f - legStride, 4.8f, strokePaint)
     }
 
     private fun drawHeadAndEars(canvas: Canvas, cx: Float, cy: Float, breath: Float) {
@@ -846,7 +1104,11 @@ class PetFloatingView(
 
         // 耳朵生理迎风与抽动反馈
         val leftEarAngle = when (motionState) {
+            PetMotionState.POST_ZOOMIES -> -25f + sin(tick * 0.75).toFloat() * 15f // 狂奔飞耳
             PetMotionState.RUNNING -> -20f + sin(tick * 0.52).toFloat() * 12f // 迎风向后掀起
+            PetMotionState.BUSTED -> 0f                                       // 石化僵直
+            PetMotionState.POOPING -> -10f                                    // 拱背微后缩
+            PetMotionState.PRANCE_URGENT -> sin(tick * 0.8).toFloat() * 10f   // 急迫抖耳
             PetMotionState.SHAKING -> sin(tick * 1.3).toFloat() * 26f         // 甩毛狂拍
             PetMotionState.SNIFFING -> 8f                                     // 探寻前耸
             PetMotionState.NAPPING -> 12f                                     // 趴睡贴耳
@@ -856,7 +1118,11 @@ class PetFloatingView(
         }
 
         val rightEarAngle = when (motionState) {
+            PetMotionState.POST_ZOOMIES -> -22f - sin(tick * 0.75).toFloat() * 15f
             PetMotionState.RUNNING -> -18f - sin(tick * 0.52).toFloat() * 12f
+            PetMotionState.BUSTED -> 0f
+            PetMotionState.POOPING -> -10f
+            PetMotionState.PRANCE_URGENT -> -sin(tick * 0.8).toFloat() * 10f
             PetMotionState.SHAKING -> -sin(tick * 1.3).toFloat() * 26f
             PetMotionState.SNIFFING -> 8f
             PetMotionState.NAPPING -> 12f
@@ -906,12 +1172,49 @@ class PetFloatingView(
         val isYawning = motionState == PetMotionState.YAWNING
         val isBellyUp = motionState == PetMotionState.BELLY_UP
         val isDragged = motionState == PetMotionState.DRAGGED
+        val isPrancing = motionState == PetMotionState.PRANCE_URGENT
+        val isPooping = motionState == PetMotionState.POOPING
+        val isPeeing = motionState == PetMotionState.PEEING
+        val isBusted = motionState == PetMotionState.BUSTED
+        val isPostZoomies = motionState == PetMotionState.POST_ZOOMIES
 
         val isBlinking = (motionState == PetMotionState.IDLE || motionState == PetMotionState.WALKING) &&
                 (tick % 130) < 5
 
-        // 眼睛渲染 (结合求摸摸水汪汪大眼睛 / 困倦眼 / 挣扎惊吓眼 / 开心眼)
+        // 眼睛渲染 (结合求摸摸水汪汪大眼睛 / 困倦眼 / 挣扎惊吓眼 / 开心眼 / 石化定格眼 / 排便锁定眼)
         when {
+            isBusted -> {
+                // 抓现行瞬间石化：圆瞪大眼 O.O
+                canvas.drawCircle(cx - 18f, faceY - 3f, 5.2f, strokePaint)
+                canvas.drawCircle(cx - 18f, faceY - 3f, 2.0f, eyePaint)
+                canvas.drawCircle(cx + 18f, faceY - 3f, 5.2f, strokePaint)
+                canvas.drawCircle(cx + 18f, faceY - 3f, 2.0f, eyePaint)
+
+                // 额头大冷汗水滴
+                canvas.drawOval(cx + 20f, faceY - 22f, cx + 27f, faceY - 11f, blushPaint)
+                canvas.drawOval(cx + 20f, faceY - 22f, cx + 27f, faceY - 11f, strokePaint)
+
+                // 旁边悬挂三根石化尴尬竖线 |||
+                canvas.drawLine(cx - 24f, faceY - 22f, cx - 24f, faceY - 12f, fineStrokePaint)
+                canvas.drawLine(cx - 20f, faceY - 24f, cx - 20f, faceY - 12f, fineStrokePaint)
+                canvas.drawLine(cx - 16f, faceY - 22f, cx - 16f, faceY - 12f, fineStrokePaint)
+            }
+            isPooping -> {
+                // 拱背深蹲：眼神专注对视锁定主人求庇护 (大豆豆眼 + 明亮双高光)
+                canvas.drawCircle(cx - 18f, faceY - 3f, 4.6f, eyePaint)
+                canvas.drawCircle(cx + 18f, faceY - 3f, 4.6f, eyePaint)
+                canvas.drawCircle(cx - 19.2f, faceY - 4.2f, 1.4f, eyeGlintPaint)
+                canvas.drawCircle(cx + 16.8f, faceY - 4.2f, 1.4f, eyeGlintPaint)
+
+                // 用力微汗
+                canvas.drawOval(cx + 21f, faceY - 14f, cx + 25f, faceY - 8f, fineStrokePaint)
+            }
+            isPrancing -> {
+                // 憋急小碎步：慌张小豆豆眼 + 急迫汗珠
+                canvas.drawCircle(cx - 18f, faceY - 3f, 3.8f, eyePaint)
+                canvas.drawCircle(cx + 18f, faceY - 3f, 3.8f, eyePaint)
+                canvas.drawOval(cx + 21f, faceY - 16f, cx + 25f, faceY - 10f, fineStrokePaint)
+            }
             isDragged -> {
                 // 惊慌受困大圆眼 (O O)
                 canvas.drawCircle(cx - 18f, faceY - 3f, 5.0f, strokePaint)
@@ -942,7 +1245,7 @@ class PetFloatingView(
                 canvas.drawArc(cx - 21f, faceY - 4f, cx - 13f, faceY + 2f, 10f, 160f, false, strokePaint)
                 canvas.drawArc(cx + 13f, faceY - 4f, cx + 21f, faceY + 2f, 10f, 160f, false, strokePaint)
             }
-            showHeart || isRunning || isBellyUp -> {
+            showHeart || isRunning || isPostZoomies || isBellyUp -> {
                 // 弯月笑眼 (^ ^)
                 canvas.drawArc(cx - 22f, faceY - 8f, cx - 12f, faceY + 2f, 200f, 140f, false, strokePaint)
                 canvas.drawArc(cx + 12f, faceY - 8f, cx + 22f, faceY + 2f, 200f, 140f, false, strokePaint)
@@ -968,7 +1271,7 @@ class PetFloatingView(
         }
 
         // 软萌粉腮红
-        val blushAlpha = if (showHeart || isRunning || isBellyUp || isBegging) 235 else 160
+        val blushAlpha = if (showHeart || isRunning || isPostZoomies || isBellyUp || isBegging || isPooping || isBusted) 235 else 160
         blushPaint.alpha = blushAlpha
         canvas.drawCircle(cx - 24f, faceY + 5f, 6.5f, blushPaint)
         canvas.drawCircle(cx + 24f, faceY + 5f, 6.5f, blushPaint)
@@ -979,14 +1282,28 @@ class PetFloatingView(
 
         // 嘴巴与舌头动作
         when {
+            isBusted -> {
+                // 震惊微张小圆嘴 o
+                canvas.drawCircle(cx, faceY + 9f, 2.8f, fineStrokePaint)
+            }
+            isPooping -> {
+                // 专注紧抿一字嘴
+                canvas.drawLine(cx - 4.5f, faceY + 8f, cx + 4.5f, faceY + 8f, fineStrokePaint)
+            }
+            isPrancing -> {
+                // 慌张波浪嘴 ~
+                canvas.drawLine(cx - 5f, faceY + 8.5f, cx - 2f, faceY + 6.5f, fineStrokePaint)
+                canvas.drawLine(cx - 2f, faceY + 6.5f, cx + 2f, faceY + 9.5f, fineStrokePaint)
+                canvas.drawLine(cx + 2f, faceY + 9.5f, cx + 5f, faceY + 7.5f, fineStrokePaint)
+            }
             isYawning -> {
                 // 打哈欠张大嘴
                 canvas.drawOval(cx - 6f, faceY + 6f, cx + 6f, faceY + 16f, tonguePaint)
                 canvas.drawOval(cx - 6f, faceY + 6f, cx + 6f, faceY + 16f, fineStrokePaint)
             }
-            isRunning -> {
+            isRunning || isPostZoomies -> {
                 // 奔跑吐舌头哈气 (👅)
-                val tongueBounce = sin(tick * 0.52).toFloat() * 2.2f
+                val tongueBounce = sin(tick * (if (isPostZoomies) 0.75 else 0.52)).toFloat() * 2.2f
                 val tongueX = cx + 4.5f
                 val tongueY = faceY + 8f + tongueBounce
 
@@ -1010,20 +1327,27 @@ class PetFloatingView(
 
     private fun drawFrontPawsAndHeart(canvas: Canvas, cx: Float, cy: Float, breath: Float) {
         val chestY = cy + 11f + breath
+        val isPrancing = motionState == PetMotionState.PRANCE_URGENT
+        val isPooping = motionState == PetMotionState.POOPING
+        val isPeeing = motionState == PetMotionState.PEEING
+        val isBusted = motionState == PetMotionState.BUSTED
 
-        // 胸前小爱心
-        heartPath.reset()
-        val heartScale = 0.48f
-        heartPath.moveTo(cx, chestY + 10f)
-        heartPath.cubicTo(cx - 18f * heartScale, chestY - 18f * heartScale, cx - 36f * heartScale, chestY + 4f * heartScale, cx, chestY + 32f * heartScale)
-        heartPath.cubicTo(cx + 36f * heartScale, chestY + 4f * heartScale, cx + 18f * heartScale, chestY - 18f * heartScale, cx, chestY + 10f)
-        heartPath.close()
+        // 排泄、憋急与抓现行时不显示胸前红心
+        if (!isPrancing && !isPooping && !isPeeing && !isBusted) {
+            // 胸前小爱心
+            heartPath.reset()
+            val heartScale = 0.48f
+            heartPath.moveTo(cx, chestY + 10f)
+            heartPath.cubicTo(cx - 18f * heartScale, chestY - 18f * heartScale, cx - 36f * heartScale, chestY + 4f * heartScale, cx, chestY + 32f * heartScale)
+            heartPath.cubicTo(cx + 36f * heartScale, chestY + 4f * heartScale, cx + 18f * heartScale, chestY - 18f * heartScale, cx, chestY + 10f)
+            heartPath.close()
 
-        canvas.drawPath(heartPath, heartPaint)
-        canvas.drawPath(heartPath, strokePaint)
+            canvas.drawPath(heartPath, heartPaint)
+            canvas.drawPath(heartPath, strokePaint)
+        }
 
         // 奔跑或刨坑时的前爪微动
-        val isRunning = motionState == PetMotionState.RUNNING
+        val isRunning = motionState == PetMotionState.RUNNING || motionState == PetMotionState.POST_ZOOMIES
         val isDigging = motionState == PetMotionState.DIGGING
         val isBegging = motionState == PetMotionState.BEGGING
         val isStretching = motionState == PetMotionState.STRETCHING
@@ -1031,6 +1355,7 @@ class PetFloatingView(
         val frontPawBounce = when {
             isRunning -> sin(tick * 0.52).toFloat() * 2.8f
             isDigging -> sin(tick * 1.4).toFloat() * 6.5f // 刨坑快速交替扒拉
+            isPrancing -> sin(tick * 0.85).toFloat() * 2.0f
             else -> 0f
         }
 
@@ -1059,6 +1384,19 @@ class PetFloatingView(
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
+                // 如果正处于排泄相关动作中 (憋急小碎步、深蹲排便、抬腿撒尿)，点击触发瞬间被抓现行石化！
+                if (motionState == PetMotionState.POOPING || motionState == PetMotionState.PEEING || motionState == PetMotionState.PRANCE_URGENT) {
+                    motionState = PetMotionState.BUSTED
+                    stateTicks = 85 // 石化定格约 2.6 秒
+                    showSpeechBubble("(被抓现行，瞬间石化不敢动... 😳)", 85)
+                    invalidate()
+                    return true
+                }
+                // 如果正处于抓现行石化定格中，小狗如雕像般不能拖拽
+                if (motionState == PetMotionState.BUSTED) {
+                    return true
+                }
+
                 initialX = layoutParams.x
                 initialY = layoutParams.y
                 initialTouchX = event.rawX

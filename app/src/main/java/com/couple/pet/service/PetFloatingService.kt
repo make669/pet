@@ -44,9 +44,14 @@ class PetFloatingService : Service() {
         }
     }
 
+    private val activeDesktopWastes = mutableListOf<com.couple.pet.view.DesktopWasteView>()
+
     companion object {
         const val CHANNEL_ID = "pet_foreground_channel"
         const val NOTIFICATION_ID = 1001
+
+        private var instance: PetFloatingService? = null
+        fun getInstance(): PetFloatingService? = instance
 
         fun start(context: Context) {
             val intent = Intent(context, PetFloatingService::class.java)
@@ -65,6 +70,7 @@ class PetFloatingService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(
                 NOTIFICATION_ID,
@@ -119,10 +125,10 @@ class PetFloatingService : Service() {
 
         val screenHeight = resources.displayMetrics.heightPixels
 
-        // 紧凑轻量悬浮容器 200x200：小狗专属占位，不遮挡手机桌面其他应用点击
+        // 紧凑轻量悬浮容器 240x240：给小狗与气泡留出适度呼吸空间
         val layoutParams = WindowManager.LayoutParams().apply {
-            width = 200
-            height = 200
+            width = 240
+            height = 240
             type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             } else {
@@ -145,8 +151,68 @@ class PetFloatingService : Service() {
         }
     }
 
+    /**
+     * 在桌面生成排泄物悬浮小徽章 [💩 扫] 或 [💧 擦]
+     */
+    fun spawnDesktopWaste(x: Int, y: Int, isPoop: Boolean) {
+        if (windowManager == null) return
+        if (activeDesktopWastes.size >= 2) {
+            val oldest = activeDesktopWastes.removeAt(0)
+            try { windowManager?.removeView(oldest) } catch (_: Exception) {}
+        }
+
+        val wasteId = System.currentTimeMillis()
+        val wasteParams = WindowManager.LayoutParams().apply {
+            width = 130
+            height = 65
+            type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            } else {
+                @Suppress("DEPRECATION")
+                WindowManager.LayoutParams.TYPE_PHONE
+            }
+            flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+            format = PixelFormat.TRANSLUCENT
+            gravity = Gravity.TOP or Gravity.START
+            this.x = x.coerceIn(20, (resources.displayMetrics.widthPixels - 150))
+            this.y = y.coerceIn(120, (resources.displayMetrics.heightPixels - 120))
+        }
+
+        val wasteView = com.couple.pet.view.DesktopWasteView(
+            context = this,
+            windowManager = windowManager!!,
+            wasteId = wasteId,
+            isPoop = isPoop,
+            initialX = wasteParams.x,
+            initialY = wasteParams.y
+        ) { cleanedView ->
+            activeDesktopWastes.remove(cleanedView)
+            try { windowManager?.removeView(cleanedView) } catch (_: Exception) {}
+            floatingView?.onWasteCleanedByOwner()
+        }
+
+        try {
+            windowManager?.addView(wasteView, wasteParams)
+            activeDesktopWastes.add(wasteView)
+            // 同步生成至 PetSyncEngine，这样相框和小屋中也会同步显示这坨排泄物
+            com.couple.pet.network.PetSyncEngine.spawnWaste(0f, isPoop = isPoop)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun cleanAllDesktopWastes() {
+        activeDesktopWastes.forEach { view ->
+            try { windowManager?.removeView(view) } catch (_: Exception) {}
+        }
+        activeDesktopWastes.clear()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        cleanAllDesktopWastes()
+        instance = null
         try {
             unregisterReceiver(batteryReceiver)
         } catch (_: Exception) {}

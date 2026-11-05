@@ -58,8 +58,11 @@ data class CoupleProfile(
     val pairCode: String = "PET-520",
     val myNickname: String = "小熊",
     val partnerNickname: String = "小兔",
+    val myAvatar: String = "🐻",
+    val partnerAvatar: String = "🐰",
     val partnerBattery: Int = 88,
     val isPartnerCharging: Boolean = true,
     val isPartnerOnline: Boolean = true,
-    val daysTogether: Int = 128
+    val daysTogether: Int = 128,
+    val lastSyncTime: Long = System.currentTimeMillis()
 )

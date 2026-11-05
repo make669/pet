@@ -20,6 +20,11 @@ import androidx.core.app.NotificationCompat
 import com.couple.pet.MainActivity
 import com.couple.pet.R
 import com.couple.pet.view.PetFloatingView
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 /**
  * 悬浮宠物的后台常驻前台服务
@@ -29,6 +34,21 @@ class PetFloatingService : Service() {
 
     private var windowManager: WindowManager? = null
     private var floatingView: PetFloatingView? = null
+    private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
+    private val syncSimulateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val typeStr = intent?.getStringExtra("type") ?: "POKE"
+            val customMsg = intent?.getStringExtra("msg")
+            android.util.Log.d("PetFloatingService", "syncSimulateReceiver: type=$typeStr, msg=$customMsg")
+            val type = try {
+                com.couple.pet.network.PartnerActionType.valueOf(typeStr)
+            } catch (_: Exception) {
+                com.couple.pet.network.PartnerActionType.POKE
+            }
+            com.couple.pet.network.PetSyncEngine.simulatePartnerAction(type, customMsg)
+        }
+    }
 
     private val batteryReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -82,6 +102,45 @@ class PetFloatingService : Service() {
         }
         initFloatingWindow()
         registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val syncFilter = IntentFilter("com.couple.pet.ACTION_SIMULATE_SYNC")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(syncSimulateReceiver, syncFilter, Context.RECEIVER_EXPORTED)
+        } else {
+            registerReceiver(syncSimulateReceiver, syncFilter)
+        }
+
+        // 监听情侣远程事件流并直接反馈至桌面悬浮小狗
+        serviceScope.launch {
+            com.couple.pet.network.PetSyncEngine.remoteEvents.collect { event ->
+                val view = floatingView ?: return@collect
+                when (event) {
+                    is com.couple.pet.network.RemotePetEvent.PartnerPoked -> {
+                        val bubbleText = if (event.message.contains(event.partnerName)) event.message else "【${event.partnerName}】${event.message}"
+                        view.showSpeechBubble(bubbleText, 140, withHeart = true)
+                        view.triggerSquashAndStretch()
+                    }
+                    is com.couple.pet.network.RemotePetEvent.PartnerFed -> {
+                        view.showSpeechBubble("【${event.partnerName}】喂了${event.foodName} 🍖", 140, withHeart = true)
+                        view.triggerSquashAndStretch()
+                    }
+                    is com.couple.pet.network.RemotePetEvent.PartnerCleanedWaste -> {
+                        view.onWasteCleanedByOwner()
+                        view.showSpeechBubble("【${event.partnerName}】帮你打扫干净啦 ❤️", 140, withHeart = true)
+                    }
+                    is com.couple.pet.network.RemotePetEvent.PartnerBathed -> {
+                        view.showSpeechBubble("【${event.partnerName}】给小狗洗香香 🛁", 140, withHeart = true)
+                        view.triggerSquashAndStretch()
+                    }
+                    is com.couple.pet.network.RemotePetEvent.PartnerNoteUpdated -> {
+                        view.showSpeechBubble("【${event.partnerName}】桌面留言: ${event.note.take(10)} 💌", 140, withHeart = true)
+                    }
+                    is com.couple.pet.network.RemotePetEvent.PartnerBatteryChanged -> {
+                        view.updateBatteryStatus(event.batteryLevel, event.isCharging)
+                    }
+                    else -> {}
+                }
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -211,10 +270,12 @@ class PetFloatingService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        serviceScope.cancel()
         cleanAllDesktopWastes()
         instance = null
         try {
             unregisterReceiver(batteryReceiver)
+            unregisterReceiver(syncSimulateReceiver)
         } catch (_: Exception) {}
 
         floatingView?.let {

@@ -30,6 +30,7 @@ import com.couple.pet.model.PetFoodManager
 import com.couple.pet.network.PetSyncEngine
 import com.couple.pet.pet.PetRegistry
 import com.couple.pet.service.PetFloatingService
+import com.couple.pet.ui.CouplePairDialog
 import com.couple.pet.ui.HomeScreen
 import com.couple.pet.ui.ProfileScreen
 import com.couple.pet.ui.ShopScreen
@@ -40,6 +41,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        PetSyncEngine.init(this)
         PetFoodManager.init(this)
         com.couple.pet.model.InventoryManager.init(this)
         PetRegistry.init(this)
@@ -215,7 +217,8 @@ fun PetAppRoot(
                     0 -> HomeScreen(
                         onOpenDrawer = { coroutineScope.launch { drawerState.open() } },
                         isPetFloating = isPetFloating,
-                        onToggleFloatingPet = { toggleFloatingPet() }
+                        onToggleFloatingPet = { toggleFloatingPet() },
+                        onOpenPairDialog = { showPairDialog = true }
                     )
                     1 -> ShopScreen()
                     2 -> ProfileScreen(
@@ -228,57 +231,9 @@ fun PetAppRoot(
         }
     }
 
-    // 情侣配对弹窗
+    // 情侣配对与同步看板弹窗
     if (showPairDialog) {
-        val coupleProfile by PetSyncEngine.coupleProfile.collectAsState()
-        var inputCode by remember { mutableStateOf("") }
-
-        AlertDialog(
-            onDismissRequest = { showPairDialog = false },
-            shape = RoundedCornerShape(24.dp),
-            containerColor = PetColors.Surface,
-            title = { Text("💕 情侣双人网络领养", fontWeight = FontWeight.Bold, color = PetColors.TextMain) },
-            text = {
-                Column {
-                    Text(
-                        text = "专属配对码：${coupleProfile.pairCode}",
-                        color = PetColors.Primary,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    OutlinedTextField(
-                        value = inputCode,
-                        onValueChange = { inputCode = it },
-                        label = { Text("输入 TA 的 6 位配对码") },
-                        shape = RoundedCornerShape(16.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = PetColors.Primary,
-                            unfocusedBorderColor = PetColors.CardBorder
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (PetSyncEngine.pairWithCode(inputCode)) {
-                            showPairDialog = false
-                        }
-                    },
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = PetColors.Primary)
-                ) {
-                    Text("确认绑定", color = Color.White)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showPairDialog = false }) {
-                    Text("取消", color = PetColors.TextSub)
-                }
-            }
-        )
+        CouplePairDialog(onDismiss = { showPairDialog = false })
     }
 }
 

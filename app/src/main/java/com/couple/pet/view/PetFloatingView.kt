@@ -15,6 +15,7 @@ import android.view.WindowManager
 import android.view.animation.OvershootInterpolator
 import androidx.core.graphics.toColorInt
 import com.couple.pet.MainActivity
+import com.couple.pet.model.PetGrowthStage
 import com.couple.pet.model.PetMotionState
 import com.couple.pet.network.PetSyncEngine
 import kotlin.math.*
@@ -142,6 +143,7 @@ class PetFloatingView(
     // 落地形变缩放 (Squash & Stretch)
     private var scaleXFactor = 1.0f
     private var scaleYFactor = 1.0f
+    private var isParachuteOpen = false
 
     // 动画游标与心跳
     private var tick = 0
@@ -332,6 +334,42 @@ class PetFloatingView(
         val bounds = getScreenBounds()
 
         when (motionState) {
+            // 0. 降落伞缓缓降落
+            PetMotionState.FALLING -> {
+                val sway = sin(tick * 0.12).toFloat() * 2.2f
+                currentExactX = (currentExactX + sway).coerceIn(bounds.left, bounds.right)
+                currentExactY += 4.2f
+                if (currentExactY >= bounds.bottom) {
+                    currentExactY = bounds.bottom
+                    isParachuteOpen = false
+                    motionState = PetMotionState.SHAKING
+                    stateTicks = 20
+                    triggerSquashAndStretch()
+                    showSpeechBubble("安全着陆！呼~ 🐾", 60)
+                }
+                layoutParams.x = currentExactX.toInt()
+                layoutParams.y = currentExactY.toInt()
+                try {
+                    windowManager.updateViewLayout(this, layoutParams)
+                } catch (_: Exception) {}
+            }
+
+            // 0. 屏幕边缘攀爬/悬空荡秋千
+            PetMotionState.CLIMBING -> {
+                stateTicks--
+                if (stateTicks <= 0) {
+                    if (currentExactY < bounds.bottom - 100f) {
+                        motionState = PetMotionState.FALLING
+                        isParachuteOpen = true
+                        showSpeechBubble("松开小爪爪~ 降落伞飘落 🪂", 80)
+                    } else {
+                        motionState = PetMotionState.IDLE
+                        idleTicks = 0
+                        restDuration = 40
+                    }
+                }
+            }
+
             // 1. 打瞌睡中：沉睡蓄能，直到体力充盈醒来
             PetMotionState.NAPPING -> {
                 if (energy >= 88f) {
@@ -768,6 +806,7 @@ class PetFloatingView(
 
         // 身体前倾倾角
         val bodyTiltAngle = when {
+            motionState == PetMotionState.CLIMBING -> sin(tick * 0.14).toFloat() * 7.5f // 悬空荡秋千摇晃
             isPostZoomies -> 14.0f * walkDirection               // 极速俯冲
             isRunning -> 7.0f * walkDirection
             isWalking -> sin(tick * 0.24).toFloat() * 4.5f * walkDirection
@@ -848,6 +887,9 @@ class PetFloatingView(
         // 绘制前爪爪与胸口小爱心
         drawFrontPawsAndHeart(canvas, centerX, centerY, motionOffsetY)
 
+        // 绘制当前形态专属装扮与特征 (奶嘴/草莓包/大骨头/红领巾/小蝴蝶结/对戒/天使羽翼)
+        drawStageAccessories(canvas, centerX, centerY, motionOffsetY)
+
         // 嗅嗅气味记号
         if (isSniffing) {
             drawSniffScentMarks(canvas, centerX, centerY + motionOffsetY)
@@ -855,6 +897,11 @@ class PetFloatingView(
 
         canvas.restore()
         canvas.restore()
+
+        // 降落伞缓缓降落时撑开的手绘降落伞
+        if (isParachuteOpen) {
+            drawParachute(canvas, centerX, centerY - 45f)
+        }
 
         // 2. 状态标识与生物状态气泡
         if (isNapping) {
@@ -1548,8 +1595,52 @@ class PetFloatingView(
     private fun onPetReleased() {
         val bounds = getScreenBounds()
         isDragging = false
-        currentExactX = layoutParams.x.toFloat().coerceIn(bounds.left, bounds.right)
-        currentExactY = layoutParams.y.toFloat().coerceIn(bounds.top, bounds.bottom)
+        val releaseX = layoutParams.x.toFloat()
+        val releaseY = layoutParams.y.toFloat()
+
+        // 1. 边缘吸附判定：如果松手位置贴近屏幕左边缘或右边缘
+        if (releaseX <= bounds.left + 40f) {
+            currentExactX = bounds.left
+            layoutParams.x = bounds.left.toInt()
+            walkDirection = 1 // 朝向内侧探头
+            motionState = PetMotionState.CLIMBING
+            stateTicks = 120 // 边缘挂载 4 秒
+            showSpeechBubble("抓住屏幕左边啦！两脚悬空晃悠悠 🐾", 90)
+            triggerSquashAndStretch()
+            try { windowManager.updateViewLayout(this, layoutParams) } catch (_: Exception) {}
+            invalidate()
+            return
+        } else if (releaseX >= bounds.right - 40f) {
+            currentExactX = bounds.right
+            layoutParams.x = bounds.right.toInt()
+            walkDirection = -1 // 朝向内侧探头
+            motionState = PetMotionState.CLIMBING
+            stateTicks = 120 // 边缘挂载 4 秒
+            showSpeechBubble("爪爪抠紧右边框！探头偷看你 👀", 90)
+            triggerSquashAndStretch()
+            try { windowManager.updateViewLayout(this, layoutParams) } catch (_: Exception) {}
+            invalidate()
+            return
+        }
+
+        // 2. 高空释放降落伞判定：若在屏幕上方或中上方松手
+        if (releaseY < bounds.bottom - 120f) {
+            currentExactX = releaseX.coerceIn(bounds.left, bounds.right)
+            currentExactY = releaseY
+            layoutParams.x = currentExactX.toInt()
+            layoutParams.y = currentExactY.toInt()
+            targetX = currentExactX
+            targetY = bounds.bottom
+            motionState = PetMotionState.FALLING
+            isParachuteOpen = true
+            showSpeechBubble("小蒲公英降落伞开！缓缓降落 🪂", 90)
+            invalidate()
+            return
+        }
+
+        // 3. 常规地面释放：甩毛恢复
+        currentExactX = releaseX.coerceIn(bounds.left, bounds.right)
+        currentExactY = releaseY.coerceIn(bounds.top, bounds.bottom)
         layoutParams.x = currentExactX.toInt()
         layoutParams.y = currentExactY.toInt()
         targetX = currentExactX
@@ -1565,6 +1656,163 @@ class PetFloatingView(
             windowManager.updateViewLayout(this, layoutParams)
         } catch (_: Exception) {}
         invalidate()
+    }
+
+    private fun drawParachute(canvas: Canvas, cx: Float, topY: Float) {
+        val sway = sin(tick * 0.12).toFloat() * 8f
+        canvas.save()
+        canvas.rotate(sway, cx, topY + 40f)
+
+        // 3 条纤细拉绳
+        val canopyY = topY - 30f
+        canvas.drawLine(cx - 30f, canopyY, cx - 10f, topY + 30f, fineStrokePaint)
+        canvas.drawLine(cx, canopyY - 4f, cx, topY + 30f, fineStrokePaint)
+        canvas.drawLine(cx + 30f, canopyY, cx + 10f, topY + 30f, fineStrokePaint)
+
+        // 降落伞手绘穹顶 (圆弧 + 烘焙白底 + 彩色条纹)
+        val canopyPath = Path().apply {
+            moveTo(cx - 38f, canopyY)
+            cubicTo(cx - 40f, canopyY - 32f, cx + 40f, canopyY - 32f, cx + 38f, canopyY)
+            quadTo(cx + 25f, canopyY - 6f, cx + 12f, canopyY)
+            quadTo(cx, canopyY - 6f, cx - 12f, canopyY)
+            quadTo(cx - 25f, canopyY - 6f, cx - 38f, canopyY)
+            close()
+        }
+        val parachutePaint = Paint(furPaint).apply { color = "#FAF2E6".toColorInt() }
+        canvas.drawPath(canopyPath, parachutePaint)
+        canvas.drawPath(canopyPath, strokePaint)
+
+        // 伞面中央手绘小心心
+        val heartP = Path().apply {
+            val s = 0.45f
+            val hy = canopyY - 14f
+            moveTo(cx, hy + 6f * s)
+            cubicTo(cx - 16f * s, hy - 16f * s, cx - 32f * s, hy + 4f * s, cx, hy + 26f * s)
+            cubicTo(cx + 32f * s, hy + 4f * s, cx + 16f * s, hy - 16f * s, cx, hy + 6f * s)
+            close()
+        }
+        canvas.drawPath(heartP, heartPaint)
+        canvas.drawPath(heartP, strokePaint)
+
+        canvas.restore()
+    }
+
+    private fun drawStageAccessories(canvas: Canvas, cx: Float, cy: Float, breath: Float) {
+        val stage = PetSyncEngine.petStats.value.stage
+        val chestY = cy + 14f + breath
+        val headY = cy - 10f + breath
+
+        when (stage) {
+            PetGrowthStage.BABY -> {
+                // 1. 奶糕幼崽期：可爱小口水兜 + 小奶嘴
+                val bibPaint = Paint(furPaint).apply { color = "#FFF9C4".toColorInt() }
+                canvas.drawRoundRect(cx - 12f, chestY, cx + 12f, chestY + 14f, 6f, 6f, bibPaint)
+                canvas.drawRoundRect(cx - 12f, chestY, cx + 12f, chestY + 14f, 6f, 6f, fineStrokePaint)
+
+                val pacifierPaint = Paint(furPaint).apply { color = "#80DEEA".toColorInt() }
+                canvas.drawCircle(cx, headY + 8f, 3.8f, pacifierPaint)
+                canvas.drawCircle(cx, headY + 8f, 3.8f, fineStrokePaint)
+                canvas.drawCircle(cx, headY + 13f, 3f, fineStrokePaint)
+            }
+            PetGrowthStage.CHILD -> {
+                // 2. 好奇探索期：草莓小挎包
+                canvas.drawLine(cx - 16f, chestY - 6f, cx + 18f, chestY + 16f, fineStrokePaint)
+                val bagPaint = Paint(furPaint).apply { color = "#FF6B81".toColorInt() }
+                val leafPaint = Paint(furPaint).apply { color = "#81C784".toColorInt() }
+                val bagX = cx + 18f
+                val bagY = chestY + 16f
+                canvas.drawOval(bagX - 6f, bagY - 6f, bagX + 6f, bagY + 7f, bagPaint)
+                canvas.drawOval(bagX - 6f, bagY - 6f, bagX + 6f, bagY + 7f, fineStrokePaint)
+                canvas.drawCircle(bagX - 2f, bagY - 6f, 2.2f, leafPaint)
+                canvas.drawCircle(bagX + 2f, bagY - 6f, 2.2f, leafPaint)
+            }
+            PetGrowthStage.AWAKEN_FOODIE -> {
+                // 3. 觉醒·食神圆滚体：胸前抱大肉骨头
+                val bonePaint = Paint(furPaint).apply { color = "#FFF8E1".toColorInt() }
+                val y = chestY + 8f
+                canvas.drawRoundRect(cx - 14f, y - 3.5f, cx + 14f, y + 3.5f, 2f, 2f, bonePaint)
+                canvas.drawRoundRect(cx - 14f, y - 3.5f, cx + 14f, y + 3.5f, 2f, 2f, fineStrokePaint)
+                canvas.drawCircle(cx - 14f, y - 3.5f, 3.2f, bonePaint)
+                canvas.drawCircle(cx - 14f, y - 3.5f, 3.2f, fineStrokePaint)
+                canvas.drawCircle(cx - 14f, y + 3.5f, 3.2f, bonePaint)
+                canvas.drawCircle(cx - 14f, y + 3.5f, 3.2f, fineStrokePaint)
+                canvas.drawCircle(cx + 14f, y - 3.5f, 3.2f, bonePaint)
+                canvas.drawCircle(cx + 14f, y - 3.5f, 3.2f, fineStrokePaint)
+                canvas.drawCircle(cx + 14f, y + 3.5f, 3.2f, bonePaint)
+                canvas.drawCircle(cx + 14f, y + 3.5f, 3.2f, fineStrokePaint)
+            }
+            PetGrowthStage.AWAKEN_SPORTY -> {
+                // 4. 觉醒·活力特技体：运动小红领巾
+                val redPaint = Paint(furPaint).apply { color = "#E53935".toColorInt() }
+                val p = Path().apply {
+                    moveTo(cx - 14f, chestY - 2f)
+                    lineTo(cx + 14f, chestY - 2f)
+                    lineTo(cx, chestY + 9f)
+                    close()
+                }
+                canvas.drawPath(p, redPaint)
+                canvas.drawPath(p, fineStrokePaint)
+                val flutter = sin(tick * 0.4).toFloat() * 3.5f
+                canvas.drawLine(cx, chestY + 9f, cx + 6f + flutter, chestY + 15f, strokePaint)
+            }
+            PetGrowthStage.AWAKEN_FLUFFY -> {
+                // 5. 觉醒·优雅蓬蓬体：粉红小蝴蝶结
+                val pinkPaint = Paint(furPaint).apply { color = "#FF4081".toColorInt() }
+                val bx = cx
+                val by = headY - 14f
+                val leftWing = Path().apply {
+                    moveTo(bx, by); lineTo(bx - 8f, by - 5f); lineTo(bx - 8f, by + 5f); close()
+                }
+                canvas.drawPath(leftWing, pinkPaint)
+                canvas.drawPath(leftWing, fineStrokePaint)
+                val rightWing = Path().apply {
+                    moveTo(bx, by); lineTo(bx + 8f, by - 5f); lineTo(bx + 8f, by + 5f); close()
+                }
+                canvas.drawPath(rightWing, pinkPaint)
+                canvas.drawPath(rightWing, fineStrokePaint)
+                canvas.drawCircle(bx, by, 3f, pinkPaint)
+                canvas.drawCircle(bx, by, 3f, fineStrokePaint)
+            }
+            PetGrowthStage.ADULT_GUARDIAN -> {
+                // 6. 成熟·守护伴侣犬：情侣对戒项圈
+                val collarPaint = Paint(furPaint).apply { color = "#5D4037".toColorInt() }
+                val goldPaint = Paint(furPaint).apply { color = "#FFD700".toColorInt() }
+                canvas.drawRoundRect(cx - 16f, chestY - 2f, cx + 16f, chestY + 3f, 2f, 2f, collarPaint)
+                canvas.drawRoundRect(cx - 16f, chestY - 2f, cx + 16f, chestY + 3f, 2f, 2f, fineStrokePaint)
+                canvas.drawCircle(cx, chestY + 6f, 3.8f, goldPaint)
+                canvas.drawCircle(cx, chestY + 6f, 3.8f, fineStrokePaint)
+                canvas.drawCircle(cx, chestY + 6f, 1.8f, furPaint)
+            }
+            PetGrowthStage.MYTHIC_ANGEL -> {
+                // 7. 神化·天使羁绊体：天使光环与纯白双翼
+                val goldStroke = Paint(strokePaint).apply { color = "#FFC107".toColorInt(); strokeWidth = 3f }
+                val haloFloat = sin(tick * 0.15).toFloat() * 2f
+                canvas.drawOval(cx - 14f, headY - 24f + haloFloat, cx + 14f, headY - 18f + haloFloat, goldStroke)
+
+                val wingFlap = sin(tick * 0.3).toFloat() * 6f
+                canvas.save()
+                canvas.rotate(-wingFlap, cx - 24f, chestY)
+                val leftWing = Path().apply {
+                    moveTo(cx - 22f, chestY - 2f)
+                    cubicTo(cx - 46f, chestY - 18f, cx - 44f, chestY + 12f, cx - 22f, chestY + 6f)
+                    close()
+                }
+                canvas.drawPath(leftWing, furPaint)
+                canvas.drawPath(leftWing, strokePaint)
+                canvas.restore()
+
+                canvas.save()
+                canvas.rotate(wingFlap, cx + 24f, chestY)
+                val rightWing = Path().apply {
+                    moveTo(cx + 22f, chestY - 2f)
+                    cubicTo(cx + 46f, chestY - 18f, cx + 44f, chestY + 12f, cx + 22f, chestY + 6f)
+                    close()
+                }
+                canvas.drawPath(rightWing, furPaint)
+                canvas.drawPath(rightWing, strokePaint)
+                canvas.restore()
+            }
+        }
     }
 
     fun triggerSquashAndStretch() {

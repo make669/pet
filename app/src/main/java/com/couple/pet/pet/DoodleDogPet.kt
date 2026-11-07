@@ -163,16 +163,25 @@ class DoodleDogPet : BasePet(
 
     // ================= 4. 身体躯干绘制 =================
     override fun drawBody(canvas: Canvas, breath: Float, motion: UniversalPetAction, tick: Long, paints: PetPaintKit) {
+        val stage = com.couple.pet.network.PetSyncEngine.petStats.value.stage
+        val isFoodie = stage == com.couple.pet.model.PetGrowthStage.AWAKEN_FOODIE
+        val widthExtra = if (isFoodie) 8f else 0f
         val bodyY = 14f + breath
         bodyPath.reset()
-        bodyPath.moveTo(-26f, bodyY - 8f)
-        bodyPath.cubicTo(-36f, bodyY + 18f, -24f, bodyY + 27f, -12f, bodyY + 27f)
-        bodyPath.lineTo(12f, bodyY + 27f)
-        bodyPath.cubicTo(24f, bodyY + 27f, 36f, bodyY + 18f, 26f, bodyY - 8f)
+        bodyPath.moveTo(-26f - widthExtra, bodyY - 8f)
+        bodyPath.cubicTo(-36f - widthExtra * 1.2f, bodyY + 18f, -24f - widthExtra, bodyY + 27f + (if (isFoodie) 4f else 0f), -12f, bodyY + 27f + (if (isFoodie) 4f else 0f))
+        bodyPath.lineTo(12f, bodyY + 27f + (if (isFoodie) 4f else 0f))
+        bodyPath.cubicTo(24f + widthExtra, bodyY + 27f + (if (isFoodie) 4f else 0f), 36f + widthExtra * 1.2f, bodyY + 18f, 26f + widthExtra, bodyY - 8f)
         bodyPath.close()
 
         canvas.drawPath(bodyPath, paints.furPaint)
         canvas.drawPath(bodyPath, paints.strokePaint)
+
+        // 蓬蓬体额外毛流波纹
+        if (stage == com.couple.pet.model.PetGrowthStage.AWAKEN_FLUFFY) {
+            canvas.drawArc(-36f, bodyY + 2f, -22f, bodyY + 16f, 120f, 140f, false, paints.fineStrokePaint)
+            canvas.drawArc(22f, bodyY + 2f, 36f, bodyY + 16f, 280f, 140f, false, paints.fineStrokePaint)
+        }
     }
 
     // ================= 5. 四肢腿脚绘制 =================
@@ -219,7 +228,193 @@ class DoodleDogPet : BasePet(
         canvas.restore()
     }
 
-    // ================= 7. 专属绝活：追尾巴原地转圈 =================
+    // ================= 7. 多形态生命特征装扮与配饰 =================
+    override fun drawAccessories(canvas: Canvas, breath: Float, motion: UniversalPetAction, tick: Long, paints: PetPaintKit) {
+        val stage = com.couple.pet.network.PetSyncEngine.petStats.value.stage
+        val chestY = 14f + breath
+        val headY = -10f + breath
+        val isExcreting = motion in listOf(
+            UniversalPetAction.POOP,
+            UniversalPetAction.PEE,
+            UniversalPetAction.PRANCE_URGENT,
+            UniversalPetAction.BUSTED_FREEZE
+        )
+
+        when (stage) {
+            com.couple.pet.model.PetGrowthStage.BABY -> {
+                // 1. 奶糕幼崽期：婴儿小口水兜 + 萌萌小奶嘴
+                drawBabyBibAndPacifier(canvas, headY + 2f, chestY, paints)
+            }
+            com.couple.pet.model.PetGrowthStage.CHILD -> {
+                // 2. 好奇探索期：草莓小挎包 (粉红草莓 + 绿叶)
+                drawStrawberryBag(canvas, chestY, paints)
+            }
+            com.couple.pet.model.PetGrowthStage.AWAKEN_FOODIE -> {
+                // 3. 觉醒·食神圆滚体：两爪抱大香肉骨头
+                drawFoodieBone(canvas, chestY, paints)
+            }
+            com.couple.pet.model.PetGrowthStage.AWAKEN_SPORTY -> {
+                // 4. 觉醒·活力特技体：红色运动小领巾 (红领结随风微摆)
+                drawSportyBandana(canvas, chestY - 4f, tick, paints)
+            }
+            com.couple.pet.model.PetGrowthStage.AWAKEN_FLUFFY -> {
+                // 5. 觉醒·优雅蓬蓬体：头顶粉红小蝴蝶结
+                drawFluffyBowknot(canvas, headY - 14f, paints)
+            }
+            com.couple.pet.model.PetGrowthStage.ADULT_GUARDIAN -> {
+                // 6. 成熟·守护伴侣犬：闪耀情侣对戒项圈
+                drawGuardianCollar(canvas, chestY - 2f, paints)
+            }
+            com.couple.pet.model.PetGrowthStage.MYTHIC_ANGEL -> {
+                // 7. 神化·天使羁绊体：金色天使光环与纯白天使翅膀
+                drawAngelWingsAndHalo(canvas, headY, chestY, tick, paints)
+            }
+        }
+
+        // 非特殊排泄状态下保留默认抱小爱心 (若不是食神抱骨头或幼崽咬奶嘴)
+        if (stage != com.couple.pet.model.PetGrowthStage.AWAKEN_FOODIE &&
+            stage != com.couple.pet.model.PetGrowthStage.BABY &&
+            !isExcreting) {
+            super.drawAccessories(canvas, breath, motion, tick, paints)
+        }
+    }
+
+    private fun drawBabyBibAndPacifier(canvas: Canvas, faceY: Float, chestY: Float, paints: PetPaintKit) {
+        // 小围兜
+        val bibPaint = android.graphics.Paint(paints.furPaint).apply { color = 0xFFFFF9C4.toInt() }
+        canvas.drawRoundRect(-12f, chestY, 12f, chestY + 14f, 6f, 6f, bibPaint)
+        canvas.drawRoundRect(-12f, chestY, 12f, chestY + 14f, 6f, 6f, paints.fineStrokePaint)
+
+        // 嘴部奶嘴手柄与小圆环
+        val pacifierPaint = android.graphics.Paint(paints.furPaint).apply { color = 0xFF80DEEA.toInt() }
+        canvas.drawCircle(0f, faceY + 7f, 4f, pacifierPaint)
+        canvas.drawCircle(0f, faceY + 7f, 4f, paints.fineStrokePaint)
+        canvas.drawCircle(0f, faceY + 12f, 3f, paints.fineStrokePaint)
+    }
+
+    private fun drawStrawberryBag(canvas: Canvas, chestY: Float, paints: PetPaintKit) {
+        // 斜跨背带
+        canvas.drawLine(-16f, chestY - 6f, 18f, chestY + 16f, paints.fineStrokePaint)
+
+        // 草莓小包包
+        val bagPaint = android.graphics.Paint(paints.furPaint).apply { color = 0xFFFF6B81.toInt() }
+        val leafPaint = android.graphics.Paint(paints.furPaint).apply { color = 0xFF81C784.toInt() }
+        val bagX = 18f
+        val bagY = chestY + 16f
+        canvas.drawOval(bagX - 6f, bagY - 6f, bagX + 6f, bagY + 7f, bagPaint)
+        canvas.drawOval(bagX - 6f, bagY - 6f, bagX + 6f, bagY + 7f, paints.fineStrokePaint)
+        // 绿叶
+        canvas.drawCircle(bagX - 2f, bagY - 6f, 2.2f, leafPaint)
+        canvas.drawCircle(bagX + 2f, bagY - 6f, 2.2f, leafPaint)
+    }
+
+    private fun drawFoodieBone(canvas: Canvas, chestY: Float, paints: PetPaintKit) {
+        // 香喷喷特大骨头
+        val bonePaint = android.graphics.Paint(paints.furPaint).apply { color = 0xFFFFF8E1.toInt() }
+        val y = chestY + 8f
+        // 骨头中间轴
+        canvas.drawRoundRect(-14f, y - 3.5f, 14f, y + 3.5f, 2f, 2f, bonePaint)
+        canvas.drawRoundRect(-14f, y - 3.5f, 14f, y + 3.5f, 2f, 2f, paints.fineStrokePaint)
+        // 左端两关节
+        canvas.drawCircle(-14f, y - 3.5f, 3.2f, bonePaint)
+        canvas.drawCircle(-14f, y - 3.5f, 3.2f, paints.fineStrokePaint)
+        canvas.drawCircle(-14f, y + 3.5f, 3.2f, bonePaint)
+        canvas.drawCircle(-14f, y + 3.5f, 3.2f, paints.fineStrokePaint)
+        // 右端两关节
+        canvas.drawCircle(14f, y - 3.5f, 3.2f, bonePaint)
+        canvas.drawCircle(14f, y - 3.5f, 3.2f, paints.fineStrokePaint)
+        canvas.drawCircle(14f, y + 3.5f, 3.2f, bonePaint)
+        canvas.drawCircle(14f, y + 3.5f, 3.2f, paints.fineStrokePaint)
+    }
+
+    private fun drawSportyBandana(canvas: Canvas, chestY: Float, tick: Long, paints: PetPaintKit) {
+        val redPaint = android.graphics.Paint(paints.furPaint).apply { color = 0xFFE53935.toInt() }
+        val p = android.graphics.Path().apply {
+            moveTo(-14f, chestY)
+            lineTo(14f, chestY)
+            lineTo(0f, chestY + 11f)
+            close()
+        }
+        canvas.drawPath(p, redPaint)
+        canvas.drawPath(p, paints.fineStrokePaint)
+
+        // 飘带
+        val flutter = sin(tick * 0.4).toFloat() * 3.5f
+        canvas.drawLine(0f, chestY + 11f, 6f + flutter, chestY + 16f, paints.strokePaint)
+    }
+
+    private fun drawFluffyBowknot(canvas: Canvas, headTopY: Float, paints: PetPaintKit) {
+        val pinkPaint = android.graphics.Paint(paints.furPaint).apply { color = 0xFFFF4081.toInt() }
+        val bx = 0f
+        val by = headTopY - 2f
+        // 蝴蝶结左翼
+        val leftWing = android.graphics.Path().apply {
+            moveTo(bx, by)
+            lineTo(bx - 8f, by - 5f)
+            lineTo(bx - 8f, by + 5f)
+            close()
+        }
+        canvas.drawPath(leftWing, pinkPaint)
+        canvas.drawPath(leftWing, paints.fineStrokePaint)
+        // 蝴蝶结右翼
+        val rightWing = android.graphics.Path().apply {
+            moveTo(bx, by)
+            lineTo(bx + 8f, by - 5f)
+            lineTo(bx + 8f, by + 5f)
+            close()
+        }
+        canvas.drawPath(rightWing, pinkPaint)
+        canvas.drawPath(rightWing, paints.fineStrokePaint)
+        // 中心圆结
+        canvas.drawCircle(bx, by, 3f, pinkPaint)
+        canvas.drawCircle(bx, by, 3f, paints.fineStrokePaint)
+    }
+
+    private fun drawGuardianCollar(canvas: Canvas, chestY: Float, paints: PetPaintKit) {
+        // 项圈
+        val collarPaint = android.graphics.Paint(paints.furPaint).apply { color = 0xFF5D4037.toInt() }
+        val goldPaint = android.graphics.Paint(paints.furPaint).apply { color = 0xFFFFD700.toInt() }
+        canvas.drawRoundRect(-16f, chestY - 2f, 16f, chestY + 3f, 2f, 2f, collarPaint)
+        canvas.drawRoundRect(-16f, chestY - 2f, 16f, chestY + 3f, 2f, 2f, paints.fineStrokePaint)
+
+        // 挂坠情侣对戒
+        canvas.drawCircle(0f, chestY + 6f, 3.8f, goldPaint)
+        canvas.drawCircle(0f, chestY + 6f, 3.8f, paints.fineStrokePaint)
+        canvas.drawCircle(0f, chestY + 6f, 1.8f, paints.furPaint)
+    }
+
+    private fun drawAngelWingsAndHalo(canvas: Canvas, headY: Float, chestY: Float, tick: Long, paints: PetPaintKit) {
+        // 1. 金色天使光环
+        val goldStroke = android.graphics.Paint(paints.strokePaint).apply { color = 0xFFFFC107.toInt(); strokeWidth = 3f }
+        val haloFloat = sin(tick * 0.15).toFloat() * 2f
+        canvas.drawOval(-14f, headY - 24f + haloFloat, 14f, headY - 18f + haloFloat, goldStroke)
+
+        // 2. 纯白小天使羽翼
+        val wingFlap = sin(tick * 0.3).toFloat() * 6f
+        canvas.save()
+        canvas.rotate(-wingFlap, -24f, chestY)
+        val leftWing = android.graphics.Path().apply {
+            moveTo(-22f, chestY - 2f)
+            cubicTo(-46f, chestY - 18f, -44f, chestY + 12f, -22f, chestY + 6f)
+            close()
+        }
+        canvas.drawPath(leftWing, paints.furPaint)
+        canvas.drawPath(leftWing, paints.strokePaint)
+        canvas.restore()
+
+        canvas.save()
+        canvas.rotate(wingFlap, 24f, chestY)
+        val rightWing = android.graphics.Path().apply {
+            moveTo(22f, chestY - 2f)
+            cubicTo(46f, chestY - 18f, 44f, chestY + 12f, 22f, chestY + 6f)
+            close()
+        }
+        canvas.drawPath(rightWing, paints.furPaint)
+        canvas.drawPath(rightWing, paints.strokePaint)
+        canvas.restore()
+    }
+
+    // ================= 8. 专属绝活：追尾巴原地转圈 =================
     override fun drawSpecialTrickPose(canvas: Canvas, breath: Float, tick: Long, paints: PetPaintKit) {
         val spinAngle = (tick * 14f) % 360f
         canvas.save()

@@ -41,13 +41,98 @@ data class PetStats(
     val level: Int = 1,            // 等级
     val exp: Int = 0,              // 当前经验值
     val maxExp: Int = 100,         // 升级所需经验
-    val stage: PetGrowthStage = PetGrowthStage.BABY // 当前生命阶段
+    val stage: PetGrowthStage = PetGrowthStage.BABY, // 当前生命阶段
+    val affinity: PersonalityAffinity = PersonalityAffinity() // 性格倾向积分
 )
 
-enum class PetGrowthStage(val label: String) {
-    BABY("幼崽期 🐾"),       // 幼崽期
-    JUVENILE("成长期 🌿"),   // 成长期
-    ADULT("成年期 👑")       // 成年期
+/**
+ * 宠物成长形态阶段枚举（五大生命周期与三大觉醒分支）
+ */
+enum class PetGrowthStage(
+    val stageIndex: Int,       // 1 ~ 5
+    val title: String,         // 显示全名
+    val shortLabel: String,    // 简短标签
+    val minLevel: Int,         // 达成最低等级
+    val description: String    // 阶段特征描述
+) {
+    BABY(
+        stageIndex = 1,
+        title = "奶糕幼崽期 🍼",
+        shortLabel = "幼崽",
+        minLevel = 1,
+        description = "糯米团子般软萌，叼着小奶嘴，走两步容易一屁股摔坐"
+    ),
+    CHILD(
+        stageIndex = 2,
+        title = "好奇探索期 🎒",
+        shortLabel = "探索",
+        minLevel = 5,
+        description = "背着小草莓挎包，学会轻快跑跳巡逻，充满探索好奇心"
+    ),
+    AWAKEN_FOODIE(
+        stageIndex = 3,
+        title = "觉醒·食神圆滚体 🥐",
+        shortLabel = "食神",
+        minLevel = 10,
+        description = "肚皮鼓鼓圆如大福，爱抱大骨头，走起路来duangduang弹动"
+    ),
+    AWAKEN_SPORTY(
+        stageIndex = 3,
+        title = "觉醒·活力特技体 ⚡",
+        shortLabel = "活力",
+        minLevel = 10,
+        description = "系着运动小领巾，身手矫健，最爱在屏幕边缘倒立与后空翻"
+    ),
+    AWAKEN_FLUFFY(
+        stageIndex = 3,
+        title = "觉醒·优雅蓬蓬体 🎩",
+        shortLabel = "蓬蓬",
+        minLevel = 10,
+        description = "云朵般松软长毛，别着小蝴蝶结，极度粘人，爱翻肚皮求摸摸"
+    ),
+    ADULT_GUARDIAN(
+        stageIndex = 4,
+        title = "成熟·守护伴侣犬 👑",
+        shortLabel = "守护",
+        minLevel = 20,
+        description = "体态优雅匀称，佩戴情侣定制对戒项圈，成为安静守护伴侣"
+    ),
+    MYTHIC_ANGEL(
+        stageIndex = 5,
+        title = "神化·天使羁绊体 🕊️",
+        shortLabel = "天使",
+        minLevel = 30,
+        description = "展开纯白小天使羽翼，脚踏金色梅花光晕，开启跨屏神迹"
+    );
+
+    val label: String get() = title
+
+    companion object {
+        // 向后兼容旧常量
+        val JUVENILE get() = CHILD
+        val ADULT get() = ADULT_GUARDIAN
+    }
+}
+
+/**
+ * 宠物三大性格行为积分倾向
+ */
+data class PersonalityAffinity(
+    val foodiePoints: Int = 0,    // 食神倾向积分 (投喂零食/大餐)
+    val sportyPoints: Int = 0,    // 活力倾向积分 (玩耍/快跑/抛接)
+    val fluffyPoints: Int = 0     // 优雅倾向积分 (洗澡/梳理/打扫)
+) {
+    /**
+     * 判定当前最优势的觉醒分支
+     */
+    fun determineBranch(): PetGrowthStage {
+        val maxPoints = maxOf(foodiePoints, sportyPoints, fluffyPoints)
+        return when {
+            maxPoints == foodiePoints -> PetGrowthStage.AWAKEN_FOODIE
+            maxPoints == sportyPoints -> PetGrowthStage.AWAKEN_SPORTY
+            else -> PetGrowthStage.AWAKEN_FLUFFY
+        }
+    }
 }
 
 /**

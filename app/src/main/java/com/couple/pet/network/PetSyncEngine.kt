@@ -67,6 +67,12 @@ sealed class RemotePetEvent {
         val isPoop: Boolean = true,
         val x: Float = 0f
     ) : RemotePetEvent()
+
+    data class PetEvolved(
+        val partnerName: String = "TA",
+        val stage: com.couple.pet.model.PetGrowthStage,
+        val message: String
+    ) : RemotePetEvent()
 }
 
 /**
@@ -108,6 +114,10 @@ object PetSyncEngine {
     private const val KEY_HUNGER = "pet_hunger"
     private const val KEY_MOOD = "pet_mood"
     private const val KEY_CLEAN = "pet_clean"
+    private const val KEY_STAGE = "pet_growth_stage"
+    private const val KEY_FOODIE_POINTS = "foodie_points"
+    private const val KEY_SPORTY_POINTS = "sporty_points"
+    private const val KEY_FLUFFY_POINTS = "fluffy_points"
 
     private var prefs: SharedPreferences? = null
     private val engineScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
@@ -127,6 +137,32 @@ object PetSyncEngine {
 
     private val _poopDemoTrigger = MutableStateFlow(0L)
     val poopDemoTrigger: StateFlow<Long> = _poopDemoTrigger.asStateFlow()
+
+    private val _evolutionCelebrationEvent = MutableStateFlow<PetGrowthStage?>(null)
+    val evolutionCelebrationEvent: StateFlow<PetGrowthStage?> = _evolutionCelebrationEvent.asStateFlow()
+
+    fun clearEvolutionCelebration() {
+        _evolutionCelebrationEvent.value = null
+    }
+
+    /**
+     * 开发者与测试快捷指令：切换/预览指定形态
+     */
+    fun debugSetGrowthStage(stage: PetGrowthStage, triggerCelebration: Boolean = false) {
+        val current = _petStats.value
+        _petStats.value = current.copy(stage = stage)
+        saveStats()
+        if (triggerCelebration) {
+            _evolutionCelebrationEvent.value = stage
+        }
+        _remoteEvents.tryEmit(
+            RemotePetEvent.PetEvolved(
+                partnerName = _coupleProfile.value.myNickname,
+                stage = stage,
+                message = "切换形态为【${stage.title}】！"
+            )
+        )
+    }
 
     private val _remoteEvents = MutableSharedFlow<RemotePetEvent>(extraBufferCapacity = 64)
     val remoteEvents: SharedFlow<RemotePetEvent> = _remoteEvents.asSharedFlow()
@@ -188,11 +224,17 @@ object PetSyncEngine {
         val hunger = p.getInt(KEY_HUNGER, 85)
         val mood = p.getInt(KEY_MOOD, 90)
         val clean = p.getInt(KEY_CLEAN, 95)
-        val stage = when {
-            level >= 10 -> PetGrowthStage.ADULT
-            level >= 5 -> PetGrowthStage.JUVENILE
-            else -> PetGrowthStage.BABY
-        }
+
+        val foodiePoints = p.getInt(KEY_FOODIE_POINTS, 0)
+        val sportyPoints = p.getInt(KEY_SPORTY_POINTS, 0)
+        val fluffyPoints = p.getInt(KEY_FLUFFY_POINTS, 0)
+        val affinity = com.couple.pet.model.PersonalityAffinity(foodiePoints, sportyPoints, fluffyPoints)
+
+        val savedStageName = p.getString(KEY_STAGE, null)
+        val stage = savedStageName?.let {
+            try { PetGrowthStage.valueOf(it) } catch (_: Exception) { null }
+        } ?: calculateGrowthStage(level, PetGrowthStage.BABY, affinity)
+
         _petStats.value = PetStats(
             hunger = hunger,
             mood = mood,
@@ -201,7 +243,8 @@ object PetSyncEngine {
             level = level,
             exp = exp,
             maxExp = (level * 100).coerceAtLeast(100),
-            stage = stage
+            stage = stage,
+            affinity = affinity
         )
     }
 
@@ -232,6 +275,10 @@ object PetSyncEngine {
             putInt(KEY_HUNGER, s.hunger)
             putInt(KEY_MOOD, s.mood)
             putInt(KEY_CLEAN, s.clean)
+            putString(KEY_STAGE, s.stage.name)
+            putInt(KEY_FOODIE_POINTS, s.affinity.foodiePoints)
+            putInt(KEY_SPORTY_POINTS, s.affinity.sportyPoints)
+            putInt(KEY_FLUFFY_POINTS, s.affinity.fluffyPoints)
             apply()
         }
     }
@@ -304,13 +351,10 @@ object PetSyncEngine {
     fun cleanWaste(wasteId: Long) {
         _floorWastes.value = _floorWastes.value.filterNot { it.id == wasteId }
         val stats = _petStats.value
-        val newExp = stats.exp + 15
-        val newCoins = stats.coins + 15 // 铲屎官辛苦津贴 +15 金币
-        val updated = stats.copy(
+        val updated = addExpAndCheckLevelUp(stats, 15, addFluffy = 2).copy(
             clean = 100,
             mood = (stats.mood + 10).coerceAtMost(100),
-            exp = newExp,
-            coins = newCoins
+            coins = stats.coins + 15 // 铲屎官辛苦津贴 +15 金币
         )
         _petStats.value = updated
         saveStats()
@@ -361,7 +405,7 @@ object PetSyncEngine {
         val updatedMood = (current.mood + moodBoost).coerceIn(0, 100)
         val updatedClean = (current.clean + cleanBoost).coerceIn(0, 100)
         val expGain = ((hungerBoost + moodBoost + cleanBoost) / 3).coerceAtLeast(6)
-        val updatedStats = addExpAndCheckLevelUp(current, expGain).copy(
+        val updatedStats = addExpAndCheckLevelUp(current, expGain, addFoodie = 2).copy(
             hunger = updatedHunger,
             mood = updatedMood,
             clean = updatedClean
@@ -393,7 +437,7 @@ object PetSyncEngine {
      */
     fun bath() {
         val current = _petStats.value
-        val updatedStats = addExpAndCheckLevelUp(current, 10).copy(
+        val updatedStats = addExpAndCheckLevelUp(current, 10, addFluffy = 2).copy(
             clean = 100
         )
         _petStats.value = updatedStats
@@ -423,7 +467,7 @@ object PetSyncEngine {
         val current = _petStats.value
         val updatedMood = (current.mood + 10).coerceAtMost(100)
         val coinBonus = if (Math.random() < 0.45) 2 else 0 // 亲密抚摸概率掉落金币
-        val updatedStats = addExpAndCheckLevelUp(current, 5).copy(
+        val updatedStats = addExpAndCheckLevelUp(current, 5, addSporty = 1).copy(
             mood = updatedMood,
             coins = current.coins + coinBonus
         )
@@ -536,7 +580,7 @@ object PetSyncEngine {
             PartnerActionType.POKE -> {
                 val msg = customMsg ?: "${partner} 隔空戳了戳你的小脸蛋 ❤️"
                 val stats = _petStats.value
-                _petStats.value = addExpAndCheckLevelUp(stats, 5).copy(
+                _petStats.value = addExpAndCheckLevelUp(stats, 5, addSporty = 1).copy(
                     mood = (stats.mood + 10).coerceAtMost(100)
                 )
                 saveStats()
@@ -547,7 +591,7 @@ object PetSyncEngine {
                 val stats = _petStats.value
                 val newHunger = (stats.hunger + 20).coerceAtMost(100)
                 val newMood = (stats.mood + 10).coerceAtMost(100)
-                _petStats.value = addExpAndCheckLevelUp(stats, 10).copy(
+                _petStats.value = addExpAndCheckLevelUp(stats, 10, addFoodie = 2).copy(
                     hunger = newHunger,
                     mood = newMood
                 )
@@ -556,7 +600,7 @@ object PetSyncEngine {
             }
             PartnerActionType.BATH -> {
                 val stats = _petStats.value
-                _petStats.value = addExpAndCheckLevelUp(stats, 10).copy(
+                _petStats.value = addExpAndCheckLevelUp(stats, 10, addFluffy = 2).copy(
                     clean = 100,
                     mood = (stats.mood + 10).coerceAtMost(100)
                 )
@@ -570,7 +614,7 @@ object PetSyncEngine {
                 cleanAllWaste()
                 val stats = _petStats.value
                 val newCoins = stats.coins + 15
-                _petStats.value = addExpAndCheckLevelUp(stats, 15).copy(
+                _petStats.value = addExpAndCheckLevelUp(stats, 15, addFluffy = 2).copy(
                     clean = 100,
                     coins = newCoins,
                     mood = (stats.mood + 10).coerceAtMost(100)
@@ -624,9 +668,15 @@ object PetSyncEngine {
     }
 
     /**
-     * 经验计算与升级进阶处理
+     * 经验计算与升级进阶处理（支持性格积分累积与多形态蜕变判定）
      */
-    private fun addExpAndCheckLevelUp(current: PetStats, addExp: Int): PetStats {
+    private fun addExpAndCheckLevelUp(
+        current: PetStats,
+        addExp: Int,
+        addFoodie: Int = 0,
+        addSporty: Int = 0,
+        addFluffy: Int = 0
+    ): PetStats {
         var newExp = current.exp + addExp
         var newLevel = current.level
         var newMaxExp = current.maxExp
@@ -637,18 +687,58 @@ object PetSyncEngine {
             newMaxExp = newLevel * 100
             bonusCoins += newLevel * 50 // 进阶升级大红包
         }
-        val newStage = when {
-            newLevel >= 10 -> PetGrowthStage.ADULT
-            newLevel >= 5 -> PetGrowthStage.JUVENILE
-            else -> PetGrowthStage.BABY
+
+        val updatedAffinity = current.affinity.copy(
+            foodiePoints = current.affinity.foodiePoints + addFoodie,
+            sportyPoints = current.affinity.sportyPoints + addSporty,
+            fluffyPoints = current.affinity.fluffyPoints + addFluffy
+        )
+
+        val newStage = calculateGrowthStage(newLevel, current.stage, updatedAffinity)
+
+        if (newStage != current.stage) {
+            // 触发进化大典事件
+            _evolutionCelebrationEvent.value = newStage
+            _remoteEvents.tryEmit(
+                RemotePetEvent.PetEvolved(
+                    partnerName = _coupleProfile.value.myNickname,
+                    stage = newStage,
+                    message = "线条小狗迎来生命蜕变，进化为【${newStage.title}】！"
+                )
+            )
         }
+
         return current.copy(
             level = newLevel,
             exp = newExp,
             maxExp = newMaxExp,
             stage = newStage,
+            affinity = updatedAffinity,
             coins = current.coins + bonusCoins
         )
+    }
+
+    private fun calculateGrowthStage(
+        level: Int,
+        currentStage: PetGrowthStage,
+        affinity: com.couple.pet.model.PersonalityAffinity
+    ): PetGrowthStage {
+        return when {
+            level >= 30 -> PetGrowthStage.MYTHIC_ANGEL
+            level >= 20 -> PetGrowthStage.ADULT_GUARDIAN
+            level >= 10 -> {
+                if (currentStage == PetGrowthStage.AWAKEN_FOODIE ||
+                    currentStage == PetGrowthStage.AWAKEN_SPORTY ||
+                    currentStage == PetGrowthStage.AWAKEN_FLUFFY
+                ) {
+                    currentStage
+                } else {
+                    affinity.determineBranch()
+                }
+            }
+            level >= 5 -> PetGrowthStage.CHILD
+            else -> PetGrowthStage.BABY
+        }
     }
 
     /**

@@ -51,6 +51,7 @@ class MainActivity : ComponentActivity() {
         PetFoodManager.init(this)
         com.couple.pet.model.InventoryManager.init(this)
         PetRegistry.init(this)
+        com.couple.pet.audio.SynesthesiaOrchestrator.init(this)
         setContent {
             MaterialTheme {
                 val authState by SupabaseAuthManager.authState.collectAsState()
@@ -116,6 +117,8 @@ fun PetAppRoot(
     var showPairDialog by remember { mutableStateOf(false) }
     var showDiaryAlbum by remember { mutableStateOf(false) }
     var showPomodoroDialog by remember { mutableStateOf(false) }
+    var showSnuggleDialog by remember { mutableStateOf(false) }
+    var showToyDialog by remember { mutableStateOf(false) }
 
     fun toggleFloatingPet() {
         if (isPetFloating) {
@@ -182,6 +185,16 @@ fun PetAppRoot(
 
                 DrawerCircleActionRow("👓", "伴学专注番茄钟", Color(0xFFE8F5E9)) {
                     showPomodoroDialog = true
+                    coroutineScope.launch { drawerState.close() }
+                }
+
+                DrawerCircleActionRow("🐾", "双狗依偎贴贴", Color(0xFFFFEBEE)) {
+                    showSnuggleDialog = true
+                    coroutineScope.launch { drawerState.close() }
+                }
+
+                DrawerCircleActionRow("🧸", "玩具百宝箱", Color(0xFFFFF3E0)) {
+                    showToyDialog = true
                     coroutineScope.launch { drawerState.close() }
                 }
 
@@ -280,6 +293,16 @@ fun PetAppRoot(
     // 伴学专注番茄钟弹窗
     if (showPomodoroDialog) {
         com.couple.pet.ui.FocusPomodoroDialog(onDismiss = { showPomodoroDialog = false })
+    }
+
+    // 双狗依偎贴贴互动弹窗
+    if (showSnuggleDialog) {
+        com.couple.pet.ui.DualPuppySnuggleDialog(onDismiss = { showSnuggleDialog = false })
+    }
+
+    // 玩具百宝箱弹窗
+    if (showToyDialog) {
+        com.couple.pet.ui.InteractiveToyDialog(onDismiss = { showToyDialog = false })
     }
 }
 

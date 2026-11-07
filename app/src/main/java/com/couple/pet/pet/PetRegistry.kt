@@ -18,6 +18,7 @@ object PetRegistry {
     // 默认内置注册的宠物大家族
     private val SPECIES_REGISTRY = mapOf<String, () -> BasePet>(
         "doodle_dog" to { DoodleDogPet() },
+        "golden_puppy" to { GoldenPuppyPet() },
         "doodle_cat" to { DoodleCatPet() },
         "doodle_rabbit" to { DoodleRabbitPet() }
     )

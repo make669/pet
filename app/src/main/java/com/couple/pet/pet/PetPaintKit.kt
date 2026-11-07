@@ -58,6 +58,21 @@ class PetPaintKit {
         style = Paint.Style.FILL
     }
 
+    // 7.1 金毛燕麦曲奇皮毛画笔 (暖烘烘燕麦色 #D5C2A5)
+    val goldenFurPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = "#D5C2A5".toColorInt()
+        style = Paint.Style.FILL
+    }
+
+    // 7.2 珊瑚暖粉细项圈画笔 (#FF7663)
+    val pinkCollarPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = "#FF7663".toColorInt()
+        style = Paint.Style.STROKE
+        strokeWidth = 5.2f
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
+
     // 8. 互动爱心画笔
     val heartPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = "#FF4B68".toColorInt()

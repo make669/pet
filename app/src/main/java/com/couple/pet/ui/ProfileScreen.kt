@@ -74,6 +74,7 @@ fun ProfileScreen(
     var showAnimalEncyclopediaDialog by remember { mutableStateOf(false) }
     var showTracksDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
+    var showSwitchPetDialog by remember { mutableStateOf(false) }
 
     var hapticFeedbackEnabled by remember { mutableStateOf(true) }
     var soundEffectEnabled by remember { mutableStateOf(true) }
@@ -286,6 +287,16 @@ fun ProfileScreen(
                         badge = "图鉴卡",
                         badgeHighlight = false,
                         onClick = { showAnimalEncyclopediaDialog = true }
+                    )
+
+                    // ---- 第 4.1 条：当前陪伴物种切换 ----
+                    ProfileFrameworkRowItem(
+                        icon = activePet.speciesEmoji,
+                        title = "陪伴小宠：${activePet.speciesName}",
+                        subtitle = "${activePet.defaultNick} · ${activePet.description}",
+                        badge = "切换物种",
+                        badgeHighlight = true,
+                        onClick = { showSwitchPetDialog = true }
                     )
 
                     // ---- 第 5 条：小窝设置与关于 ----
@@ -957,6 +968,101 @@ fun ProfileScreen(
                             Text("线条小宠 · 治愈情侣伴侣版 (纯净无广告)", fontSize = 11.sp, color = PetColors.TextSub)
                         }
                         Text("v2.0.0", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PetColors.TextSub)
+                    }
+                }
+            }
+        }
+    }
+
+    // 6. 陪伴小宠物种切换弹窗
+    if (showSwitchPetDialog) {
+        Dialog(onDismissRequest = { showSwitchPetDialog = false }) {
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = PetColors.Surface,
+                border = androidx.compose.foundation.BorderStroke(1.dp, PetColors.CardBorder),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "🐾 陪伴小宠家族切换",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PetColors.TextMain
+                        )
+                        IconButton(onClick = { showSwitchPetDialog = false }, modifier = Modifier.size(28.dp)) {
+                            Icon(Icons.Default.Close, contentDescription = "关闭", tint = PetColors.TextSub)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    PetRegistry.getAllPets().forEach { pet ->
+                        val isSelected = activePet.speciesId == pet.speciesId
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = if (isSelected) PetColors.PrimaryContainer else PetColors.SurfaceVariant.copy(alpha = 0.5f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) PetColors.Primary else PetColors.CardBorder),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 5.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .clickable {
+                                    PetRegistry.switchPet(pet.speciesId)
+                                    com.couple.pet.audio.SynesthesiaOrchestrator.emit(com.couple.pet.audio.SynesthesiaEvent.PET_HEAD)
+                                    showSwitchPetDialog = false
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(pet.speciesEmoji, fontSize = 28.sp)
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = pet.speciesName,
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = PetColors.TextMain
+                                        )
+                                        if (isSelected) {
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Surface(
+                                                shape = RoundedCornerShape(6.dp),
+                                                color = PetColors.Primary
+                                            ) {
+                                                Text(
+                                                    text = "陪伴中",
+                                                    fontSize = 9.sp,
+                                                    color = Color.White,
+                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Text(
+                                        text = "${pet.defaultNick} · ${pet.description}",
+                                        fontSize = 11.sp,
+                                        color = PetColors.TextSub
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }

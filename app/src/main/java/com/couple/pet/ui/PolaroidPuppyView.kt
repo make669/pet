@@ -84,6 +84,8 @@ fun PolaroidPuppyViewport(
     val activePet by PetRegistry.activePet.collectAsState()
     val floorWastes by PetSyncEngine.floorWastes.collectAsState()
     val poopDemoTrigger by PetSyncEngine.poopDemoTrigger.collectAsState()
+    val activeToy by com.couple.pet.model.ToyManager.activeToy.collectAsState()
+    var toyBounce by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
 
     // 真实排泄行为管线：憋急小碎步 -> 寻觅角落 -> 弓背排便/撒尿 -> 拉后暴走冲刺
@@ -407,6 +409,7 @@ fun PolaroidPuppyViewport(
                         }
                         onPetTouched()
                         PetSyncEngine.poke()
+                        com.couple.pet.audio.SynesthesiaOrchestrator.emit(com.couple.pet.audio.SynesthesiaEvent.PET_HEAD)
                         behavior = FramePuppyBehavior.HAPPY_JUMP
                         showHeartEffect = true
                         speechBubble = activePet.getTouchReaction()
@@ -454,6 +457,54 @@ fun PolaroidPuppyViewport(
                         .offset(x = currentX.dp, y = (-42).dp)
                 ) {
                     Text(text = "❤️ ✨", fontSize = 28.sp)
+                }
+            }
+
+            // 4.1 地面互动玩具实体 (微缩家园摆放的活跃玩具)
+            if (activeToy != null) {
+                val toy = activeToy!!
+                val toyScale by animateFloatAsState(
+                    targetValue = if (toyBounce) 1.25f else 1.0f,
+                    animationSpec = spring(dampingRatio = 0.45f, stiffness = 600f),
+                    label = "toyScale"
+                )
+
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 22.dp, bottom = 18.dp)
+                        .scale(toyScale)
+                        .zIndex(15f)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color.White.copy(alpha = 0.92f))
+                        .border(1.2.dp, PetColors.PrimaryBorder, RoundedCornerShape(16.dp))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            com.couple.pet.audio.SynesthesiaOrchestrator.emit(toy.synesthesiaEvent)
+                            toyBounce = true
+                            speechBubble = "和【${toy.name}】玩耍超开心！🐾"
+                            coroutineScope.launch {
+                                delay(300)
+                                toyBounce = false
+                                delay(1800)
+                                speechBubble = null
+                            }
+                        }
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(toy.emoji, fontSize = 20.sp)
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            text = toy.name,
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PetColors.Primary
+                        )
+                    }
                 }
             }
 

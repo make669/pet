@@ -68,6 +68,8 @@ fun HomeScreen(
     var showEvolutionSheet by remember { mutableStateOf(false) }
     var showDiaryAlbum by remember { mutableStateOf(false) }
     var showPomodoroDialog by remember { mutableStateOf(false) }
+    var showSnuggleDialog by remember { mutableStateOf(false) }
+    var showToyDialog by remember { mutableStateOf(false) }
     val isPomodoroActive by PetSyncEngine.isPomodoroActive.collectAsState()
     val evolutionEvent by PetSyncEngine.evolutionCelebrationEvent.collectAsState()
 
@@ -161,55 +163,89 @@ fun HomeScreen(
                     color = PetColors.TextMain
                 )
 
-                // 顶部右侧：日记 + 伴学 + 陪伴状态胶囊
+                // 顶部右侧：日记 + 伴学 + 贴贴 + 玩具 + 连线胶囊
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Surface(
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(12.dp),
                         color = PetColors.SurfaceVariant.copy(alpha = 0.7f),
                         border = androidx.compose.foundation.BorderStroke(1.dp, PetColors.CardBorder),
                         modifier = Modifier
-                            .clip(RoundedCornerShape(14.dp))
+                            .clip(RoundedCornerShape(12.dp))
                             .clickable { showDiaryAlbum = true }
                     ) {
                         Text(
                             text = "📖 日记",
-                            fontSize = 10.5.sp,
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.Medium,
                             color = PetColors.TextMain,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 3.5.dp)
                         )
                     }
 
                     Surface(
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(12.dp),
                         color = if (isPomodoroActive) PetColors.PrimaryContainer else PetColors.SurfaceVariant.copy(alpha = 0.7f),
                         border = androidx.compose.foundation.BorderStroke(1.dp, if (isPomodoroActive) PetColors.PrimaryBorder else PetColors.CardBorder),
                         modifier = Modifier
-                            .clip(RoundedCornerShape(14.dp))
+                            .clip(RoundedCornerShape(12.dp))
                             .clickable { showPomodoroDialog = true }
                     ) {
                         Text(
                             text = if (isPomodoroActive) "⏳ 伴学中" else "⏳ 伴学",
-                            fontSize = 10.5.sp,
+                            fontSize = 10.sp,
                             fontWeight = if (isPomodoroActive) FontWeight.Bold else FontWeight.Medium,
                             color = if (isPomodoroActive) PetColors.Primary else PetColors.TextMain,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 3.5.dp)
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFFFFEBEE),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFCDD2)),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { showSnuggleDialog = true }
+                    ) {
+                        Text(
+                            text = "💕 贴贴",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFE91E63),
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 3.5.dp)
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFFFFF3E0),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFE0B2)),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { showToyDialog = true }
+                    ) {
+                        Text(
+                            text = "🧸 玩具",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFE65100),
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 3.5.dp)
                         )
                     }
 
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
+                            .clip(RoundedCornerShape(14.dp))
                             .background(PetColors.PrimaryContainer)
                             .clickable { onOpenPairDialog() }
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .padding(horizontal = 6.dp, vertical = 3.5.dp)
                     ) {
                         Text(
                             text = if (coupleProfile.isPaired) "💕 ${coupleProfile.partnerNickname}" else "🐾 连线",
-                            fontSize = 10.5.sp,
+                            fontSize = 10.sp,
                             maxLines = 1,
                             fontWeight = FontWeight.Bold,
                             color = PetColors.Primary
@@ -630,6 +666,16 @@ fun HomeScreen(
     // ================= 桌面情侣自律伴学番茄钟 =================
     if (showPomodoroDialog) {
         FocusPomodoroDialog(onDismiss = { showPomodoroDialog = false })
+    }
+
+    // ================= 双狗依偎贴贴互动弹窗 =================
+    if (showSnuggleDialog) {
+        DualPuppySnuggleDialog(onDismiss = { showSnuggleDialog = false })
+    }
+
+    // ================= 30 种玩具百宝箱弹窗 =================
+    if (showToyDialog) {
+        InteractiveToyDialog(onDismiss = { showToyDialog = false })
     }
 }
 

@@ -1723,6 +1723,13 @@ class PetFloatingView(
         val chestY = cy + 14f + breath
         val headY = cy - 10f + breath
 
+        // 伴学专注模式：戴黑框小眼镜
+        if (PetSyncEngine.isPomodoroActive.value) {
+            canvas.drawCircle(cx - 8f, headY, 5.2f, fineStrokePaint)
+            canvas.drawCircle(cx + 8f, headY, 5.2f, fineStrokePaint)
+            canvas.drawLine(cx - 2.8f, headY, cx + 2.8f, headY, fineStrokePaint)
+        }
+
         when (stage) {
             PetGrowthStage.BABY -> {
                 // 1. 奶糕幼崽期：可爱小口水兜 + 小奶嘴

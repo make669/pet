@@ -114,6 +114,8 @@ fun PetAppRoot(
     val coroutineScope = rememberCoroutineScope()
     var isPetFloating by remember { mutableStateOf(false) }
     var showPairDialog by remember { mutableStateOf(false) }
+    var showDiaryAlbum by remember { mutableStateOf(false) }
+    var showPomodoroDialog by remember { mutableStateOf(false) }
 
     fun toggleFloatingPet() {
         if (isPetFloating) {
@@ -170,6 +172,16 @@ fun PetAppRoot(
 
                 DrawerCircleActionRow("💩", "观察生理排泄 (演示)", Color(0xFF8D6E63)) {
                     PetSyncEngine.triggerPoopDemo()
+                    coroutineScope.launch { drawerState.close() }
+                }
+
+                DrawerCircleActionRow("📖", "秘密回忆相册", Color(0xFFFFF3E0)) {
+                    showDiaryAlbum = true
+                    coroutineScope.launch { drawerState.close() }
+                }
+
+                DrawerCircleActionRow("👓", "伴学专注番茄钟", Color(0xFFE8F5E9)) {
+                    showPomodoroDialog = true
                     coroutineScope.launch { drawerState.close() }
                 }
 
@@ -258,6 +270,16 @@ fun PetAppRoot(
     // 情侣配对与同步看板弹窗
     if (showPairDialog) {
         CouplePairDialog(onDismiss = { showPairDialog = false })
+    }
+
+    // 秘密回忆日记相册弹窗
+    if (showDiaryAlbum) {
+        com.couple.pet.ui.DiaryAlbumDialog(onDismiss = { showDiaryAlbum = false })
+    }
+
+    // 伴学专注番茄钟弹窗
+    if (showPomodoroDialog) {
+        com.couple.pet.ui.FocusPomodoroDialog(onDismiss = { showPomodoroDialog = false })
     }
 }
 

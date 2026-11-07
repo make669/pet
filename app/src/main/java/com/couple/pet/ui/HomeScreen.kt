@@ -65,6 +65,8 @@ fun HomeScreen(
     var lastFedFoodName by remember { mutableStateOf("") }
     var showCustomizeDialog by remember { mutableStateOf(false) }
     var showTracksDialog by remember { mutableStateOf(false) }
+    var showEvolutionSheet by remember { mutableStateOf(false) }
+    val evolutionEvent by PetSyncEngine.evolutionCelebrationEvent.collectAsState()
 
     val coroutineScope = rememberCoroutineScope()
 
@@ -86,6 +88,9 @@ fun HomeScreen(
                 }
                 is com.couple.pet.network.RemotePetEvent.PartnerNoteUpdated -> {
                     feedbackTip = "【${event.partnerName}】更新了桌面便签 💌"
+                }
+                is com.couple.pet.network.RemotePetEvent.PetEvolved -> {
+                    feedbackTip = "🎉 小宠蜕变：【${event.stage.title}】！"
                 }
                 else -> {}
             }
@@ -193,7 +198,52 @@ fun HomeScreen(
                 }
             }
 
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // 当前成长形态胶囊 (点击打开形态进化图谱与试衣镜)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = PetColors.Primary.copy(alpha = 0.10f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, PetColors.Primary.copy(alpha = 0.4f)),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { showEvolutionSheet = true }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "✨ ${petStats.stage.title} (Lv.${petStats.level})",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PetColors.Primary
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "形态图谱 >",
+                        fontSize = 10.sp,
+                        color = PetColors.TextSub
+                    )
+                }
+            }
+
+            Text(
+                text = "EXP ${petStats.exp}/${petStats.maxExp}",
+                fontSize = 10.5.sp,
+                color = PetColors.TextSub,
+                fontWeight = FontWeight.Medium
+            )
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
 
         // ================= Box 1: 拍立得画框小狗生活视窗 (大圆角矩形) =================
         Card(
@@ -537,6 +587,19 @@ fun HomeScreen(
     // ================= 24 种动物足印图鉴弹窗 =================
     if (showTracksDialog) {
         AnimalTracksEncyclopediaDialog(onDismiss = { showTracksDialog = false })
+    }
+
+    // ================= 7 种生命形态进化图谱与变幻试衣镜 =================
+    if (showEvolutionSheet) {
+        EvolutionPreviewSheet(onDismiss = { showEvolutionSheet = false })
+    }
+
+    // ================= 蜕变进阶典藏庆祝弹窗 =================
+    if (evolutionEvent != null) {
+        EvolutionCelebrationDialog(
+            stage = evolutionEvent!!,
+            onDismiss = { PetSyncEngine.clearEvolutionCelebration() }
+        )
     }
 }
 

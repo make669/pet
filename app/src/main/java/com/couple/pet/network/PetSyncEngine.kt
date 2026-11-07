@@ -118,6 +118,21 @@ object PetSyncEngine {
     private const val KEY_FOODIE_POINTS = "foodie_points"
     private const val KEY_SPORTY_POINTS = "sporty_points"
     private const val KEY_FLUFFY_POINTS = "fluffy_points"
+    private const val KEY_DAILY_EXP = "pet_daily_exp"
+    private const val KEY_DAILY_RESET_DAY = "pet_daily_reset_day"
+
+    // 胃肠热量消化历史记录 (用于泊松排泄动力学危险度计算)
+    private val _calorieHistory = mutableListOf<Pair<Long, Int>>()
+    val calorieHistory: List<Pair<Long, Int>>
+        get() = synchronized(_calorieHistory) { _calorieHistory.toList() }
+
+    fun recordCalorieFeed(calories: Int) {
+        val now = System.currentTimeMillis()
+        synchronized(_calorieHistory) {
+            _calorieHistory.add(Pair(now, calories))
+            _calorieHistory.removeAll { (time, _) -> now - time > 6 * 3600 * 1000L }
+        }
+    }
 
     private var prefs: SharedPreferences? = null
     private val engineScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
@@ -235,6 +250,12 @@ object PetSyncEngine {
             try { PetGrowthStage.valueOf(it) } catch (_: Exception) { null }
         } ?: calculateGrowthStage(level, PetGrowthStage.BABY, affinity)
 
+        val dailyExp = p.getInt(KEY_DAILY_EXP, 0)
+        val dailyResetDay = p.getLong(KEY_DAILY_RESET_DAY, 0L)
+        val currentDay = System.currentTimeMillis() / (24 * 3600 * 1000L)
+        val effectiveDailyExp = if (dailyResetDay == currentDay) dailyExp else 0
+        val maxExp = com.couple.pet.numerical.NumericalPhysicsEngine.calculateNextLevelExp(level)
+
         _petStats.value = PetStats(
             hunger = hunger,
             mood = mood,
@@ -242,9 +263,11 @@ object PetSyncEngine {
             coins = coins,
             level = level,
             exp = exp,
-            maxExp = (level * 100).coerceAtLeast(100),
+            maxExp = maxExp,
             stage = stage,
-            affinity = affinity
+            affinity = affinity,
+            dailyExpAcquired = effectiveDailyExp,
+            dailyExpResetDay = currentDay
         )
     }
 
@@ -279,6 +302,8 @@ object PetSyncEngine {
             putInt(KEY_FOODIE_POINTS, s.affinity.foodiePoints)
             putInt(KEY_SPORTY_POINTS, s.affinity.sportyPoints)
             putInt(KEY_FLUFFY_POINTS, s.affinity.fluffyPoints)
+            putInt(KEY_DAILY_EXP, s.dailyExpAcquired)
+            putLong(KEY_DAILY_RESET_DAY, s.dailyExpResetDay)
             apply()
         }
     }
@@ -401,11 +426,28 @@ object PetSyncEngine {
         cleanBoost: Int = 0
     ) {
         val current = _petStats.value
-        val updatedHunger = (current.hunger + hungerBoost).coerceIn(0, 100)
-        val updatedMood = (current.mood + moodBoost).coerceIn(0, 100)
-        val updatedClean = (current.clean + cleanBoost).coerceIn(0, 100)
-        val expGain = ((hungerBoost + moodBoost + cleanBoost) / 3).coerceAtLeast(6)
-        val updatedStats = addExpAndCheckLevelUp(current, expGain, addFoodie = 2).copy(
+        val nutrition = com.couple.pet.numerical.NumericalPhysicsEngine.findNutrition(name)
+        val effHunger = nutrition?.hungerGain ?: hungerBoost
+        val effMood = nutrition?.moodGain ?: moodBoost
+        val effClean = nutrition?.cleanGain ?: cleanBoost
+        val addFoodie = nutrition?.foodiePoints ?: 2
+        val addSporty = nutrition?.sportyPoints ?: 0
+        val addFluffy = nutrition?.fluffyPoints ?: 0
+        val calories = nutrition?.calories ?: 35
+
+        recordCalorieFeed(calories)
+
+        val updatedHunger = (current.hunger + effHunger).coerceIn(0, 100)
+        val updatedMood = (current.mood + effMood).coerceIn(0, 100)
+        val updatedClean = (current.clean + effClean).coerceIn(0, 100)
+        val expGain = ((effHunger + effMood + effClean) / 3).coerceAtLeast(6)
+        val updatedStats = addExpAndCheckLevelUp(
+            current,
+            expGain,
+            addFoodie = addFoodie,
+            addSporty = addSporty,
+            addFluffy = addFluffy
+        ).copy(
             hunger = updatedHunger,
             mood = updatedMood,
             clean = updatedClean
@@ -677,14 +719,18 @@ object PetSyncEngine {
         addSporty: Int = 0,
         addFluffy: Int = 0
     ): PetStats {
-        var newExp = current.exp + addExp
+        val currentDay = System.currentTimeMillis() / (24 * 3600 * 1000L)
+        val dailyAcquired = if (current.dailyExpResetDay == currentDay) current.dailyExpAcquired else 0
+        val clampedExp = com.couple.pet.numerical.NumericalPhysicsEngine.clampEffectiveExpGain(dailyAcquired, addExp)
+
+        var newExp = current.exp + clampedExp
         var newLevel = current.level
-        var newMaxExp = current.maxExp
+        var newMaxExp = com.couple.pet.numerical.NumericalPhysicsEngine.calculateNextLevelExp(newLevel)
         var bonusCoins = 0
         while (newExp >= newMaxExp) {
             newExp -= newMaxExp
             newLevel++
-            newMaxExp = newLevel * 100
+            newMaxExp = com.couple.pet.numerical.NumericalPhysicsEngine.calculateNextLevelExp(newLevel)
             bonusCoins += newLevel * 50 // 进阶升级大红包
         }
 
@@ -714,7 +760,9 @@ object PetSyncEngine {
             maxExp = newMaxExp,
             stage = newStage,
             affinity = updatedAffinity,
-            coins = current.coins + bonusCoins
+            coins = current.coins + bonusCoins,
+            dailyExpAcquired = dailyAcquired + clampedExp,
+            dailyExpResetDay = currentDay
         )
     }
 
@@ -741,16 +789,61 @@ object PetSyncEngine {
         }
     }
 
+    private var hungerDecayAccumulator = 0f
+    private var cleanDecayAccumulator = 0f
+    private var moodDecayAccumulator = 0f
+
     /**
-     * 周期性数值自然衰减（模拟生命活力）
+     * 周期性数值自然衰减（遵循昼夜作息与心理同理心动力学方程）
+     * 昼间 (08:00~23:00): 饱食 -4/h, 清洁 -2.5/h, 心情 -3/h
+     * 夜间 (23:00~08:00): 消耗保留 25% (饱食 -1/h, 清洁 -0.5/h, 心情 -0.5/h)
      */
-    fun decayStats() {
+    fun decayStats(elapsedSeconds: Float = 30f) {
         val current = _petStats.value
-        _petStats.value = current.copy(
-            hunger = (current.hunger - 1).coerceAtLeast(0),
-            mood = (current.mood - 1).coerceAtLeast(0),
-            clean = (current.clean - 1).coerceAtLeast(0)
+        val isNight = com.couple.pet.numerical.NumericalPhysicsEngine.isNightTime()
+        val elapsedMinutes = elapsedSeconds / 60.0f
+
+        val dH = com.couple.pet.numerical.NumericalPhysicsEngine.calculateVitalDecayStep(
+            com.couple.pet.numerical.VitalType.HUNGER, elapsedMinutes, isNight, current.hunger, current.clean
         )
-        saveStats()
+        val dC = com.couple.pet.numerical.NumericalPhysicsEngine.calculateVitalDecayStep(
+            com.couple.pet.numerical.VitalType.CLEAN, elapsedMinutes, isNight, current.hunger, current.clean
+        )
+        val dM = com.couple.pet.numerical.NumericalPhysicsEngine.calculateVitalDecayStep(
+            com.couple.pet.numerical.VitalType.MOOD, elapsedMinutes, isNight, current.hunger, current.clean
+        )
+
+        hungerDecayAccumulator += dH
+        cleanDecayAccumulator += dC
+        moodDecayAccumulator += dM
+
+        var newH = current.hunger
+        var newC = current.clean
+        var newM = current.mood
+        var changed = false
+
+        if (hungerDecayAccumulator >= 1.0f) {
+            val drop = hungerDecayAccumulator.toInt()
+            newH = (newH - drop).coerceAtLeast(0)
+            hungerDecayAccumulator -= drop
+            changed = true
+        }
+        if (cleanDecayAccumulator >= 1.0f) {
+            val drop = cleanDecayAccumulator.toInt()
+            newC = (newC - drop).coerceAtLeast(0)
+            cleanDecayAccumulator -= drop
+            changed = true
+        }
+        if (moodDecayAccumulator >= 1.0f) {
+            val drop = moodDecayAccumulator.toInt()
+            newM = (newM - drop).coerceAtLeast(0)
+            moodDecayAccumulator -= drop
+            changed = true
+        }
+
+        if (changed) {
+            _petStats.value = current.copy(hunger = newH, clean = newC, mood = newM)
+            saveStats()
+        }
     }
 }

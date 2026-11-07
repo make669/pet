@@ -283,13 +283,17 @@ class PetFloatingView(
             return
         }
 
-        // 自然生理排泄需求累积
+        // 自然生理排泄需求累积（基于胃肠消化热量动态危险度积分模型）
         if (motionState != PetMotionState.POOPING &&
             motionState != PetMotionState.PEEING &&
             motionState != PetMotionState.PRANCE_URGENT &&
             motionState != PetMotionState.POST_ZOOMIES &&
             motionState != PetMotionState.BUSTED) {
-            bladderUrge += 0.04f
+            val hazard = com.couple.pet.numerical.NumericalPhysicsEngine.calculatePoopHazardRate(
+                calorieHistory = PetSyncEngine.calorieHistory,
+                currentTimeMs = System.currentTimeMillis()
+            )
+            bladderUrge += hazard * 100f
             if (bladderUrge >= 100f && (motionState == PetMotionState.IDLE || motionState == PetMotionState.WALKING)) {
                 bladderUrge = 0f
                 startEliminationSequence(isPoop = Math.random() < 0.6)
@@ -557,33 +561,50 @@ class PetFloatingView(
 
                     val dist = hypot((targetX - currentExactX).toDouble(), (targetY - currentExactY).toDouble()).toFloat()
 
-                    // 根据体力与距离决策是慢走、冲刺撒欢还是嗅闻
-                    val randAction = Math.random()
-                    when {
-                        // 精力充沛且距离适中 -> 兴奋撒欢快跑 (Zoomies)
-                        dist > 120f && randAction < 0.52 && energy > 35f -> {
+                    // 依据马尔可夫决策转移网络与动态生理参数决策下一动作状态
+                    val currentStats = PetSyncEngine.petStats.value
+                    val nextRoam = com.couple.pet.numerical.NumericalPhysicsEngine.decideNextRoamState(
+                        currentState = motionState,
+                        hunger = currentStats.hunger,
+                        mood = currentStats.mood,
+                        clean = currentStats.clean,
+                        energy = energy
+                    )
+
+                    when (nextRoam) {
+                        PetMotionState.RUNNING -> {
                             motionState = PetMotionState.RUNNING
                             currentSpeed = (5.8f + Math.random() * 1.6f).toFloat()
                         }
-                        // 偶尔打个大哈欠
-                        randAction < 0.12 && energy < 50f -> {
-                            motionState = PetMotionState.YAWNING
-                            stateTicks = 35
-                        }
-                        // 偶尔坐下挠后腿
-                        randAction < 0.22 -> {
+                        PetMotionState.SCRATCHING -> {
                             motionState = PetMotionState.SCRATCHING
-                            stateTicks = 36 // 挠耳朵约 1.2 秒
+                            stateTicks = 36
                         }
-                        // 停下好奇嗅嗅地面
-                        randAction < 0.35 -> {
-                            motionState = PetMotionState.SNIFFING
-                            stateTicks = (30..45).random()
+                        PetMotionState.NAPPING -> {
+                            if (isNearBottom) {
+                                motionState = PetMotionState.NAPPING
+                            } else {
+                                targetX = currentExactX
+                                targetY = bounds.bottom - 10f
+                                motionState = PetMotionState.WALKING
+                                currentSpeed = 2.0f
+                            }
                         }
-                        // 其余概率悠闲慢慢步巡游
+                        PetMotionState.CLIMBING -> {
+                            val snapToLeft = currentExactX < (bounds.left + bounds.right) / 2
+                            targetX = if (snapToLeft) bounds.left else bounds.right
+                            walkDirection = if (snapToLeft) -1 else 1
+                            motionState = PetMotionState.CLIMBING
+                            stateTicks = 100
+                        }
                         else -> {
-                            motionState = PetMotionState.WALKING
-                            currentSpeed = (1.8f + Math.random() * 0.6f).toFloat()
+                            if (Math.random() < 0.25) {
+                                motionState = PetMotionState.SNIFFING
+                                stateTicks = (30..45).random()
+                            } else {
+                                motionState = PetMotionState.WALKING
+                                currentSpeed = (1.8f + Math.random() * 0.6f).toFloat()
+                            }
                         }
                     }
                 }

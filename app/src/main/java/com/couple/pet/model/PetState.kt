@@ -40,9 +40,11 @@ data class PetStats(
     val coins: Int = 120,          // 铲屎官金币资产 (打扫/摸摸/相伴赚取)
     val level: Int = 1,            // 等级
     val exp: Int = 0,              // 当前经验值
-    val maxExp: Int = 100,         // 升级所需经验
+    val maxExp: Int = 50,          // 升级所需经验 (首级基准 50)
     val stage: PetGrowthStage = PetGrowthStage.BABY, // 当前生命阶段
-    val affinity: PersonalityAffinity = PersonalityAffinity() // 性格倾向积分
+    val affinity: PersonalityAffinity = PersonalityAffinity(), // 性格倾向积分
+    val dailyExpAcquired: Int = 0, // 当日已累积经验值 (用于 260/340 软硬上限)
+    val dailyExpResetDay: Long = 0L // 每日经验重置天标 (天数标记)
 )
 
 /**

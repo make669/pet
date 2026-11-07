@@ -66,6 +66,9 @@ fun HomeScreen(
     var showCustomizeDialog by remember { mutableStateOf(false) }
     var showTracksDialog by remember { mutableStateOf(false) }
     var showEvolutionSheet by remember { mutableStateOf(false) }
+    var showDiaryAlbum by remember { mutableStateOf(false) }
+    var showPomodoroDialog by remember { mutableStateOf(false) }
+    val isPomodoroActive by PetSyncEngine.isPomodoroActive.collectAsState()
     val evolutionEvent by PetSyncEngine.evolutionCelebrationEvent.collectAsState()
 
     val coroutineScope = rememberCoroutineScope()
@@ -158,10 +161,10 @@ fun HomeScreen(
                     color = PetColors.TextMain
                 )
 
-                // 顶部右侧：24种足迹图鉴按钮 + 陪伴状态胶囊
+                // 顶部右侧：日记 + 伴学 + 陪伴状态胶囊
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     Surface(
                         shape = RoundedCornerShape(14.dp),
@@ -169,14 +172,31 @@ fun HomeScreen(
                         border = androidx.compose.foundation.BorderStroke(1.dp, PetColors.CardBorder),
                         modifier = Modifier
                             .clip(RoundedCornerShape(14.dp))
-                            .clickable { showTracksDialog = true }
+                            .clickable { showDiaryAlbum = true }
                     ) {
                         Text(
-                            text = "🐾 24种足迹",
+                            text = "📖 日记",
                             fontSize = 10.5.sp,
                             fontWeight = FontWeight.Medium,
                             color = PetColors.TextMain,
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (isPomodoroActive) PetColors.PrimaryContainer else PetColors.SurfaceVariant.copy(alpha = 0.7f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, if (isPomodoroActive) PetColors.PrimaryBorder else PetColors.CardBorder),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { showPomodoroDialog = true }
+                    ) {
+                        Text(
+                            text = if (isPomodoroActive) "⏳ 伴学中" else "⏳ 伴学",
+                            fontSize = 10.5.sp,
+                            fontWeight = if (isPomodoroActive) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isPomodoroActive) PetColors.Primary else PetColors.TextMain,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
                         )
                     }
 
@@ -188,7 +208,7 @@ fun HomeScreen(
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = if (coupleProfile.isPaired) "💕 ${coupleProfile.partnerNickname} 🔋${coupleProfile.partnerBattery}%${if (coupleProfile.isPartnerCharging) "⚡" else ""}" else "🐾 单人·连线",
+                            text = if (coupleProfile.isPaired) "💕 ${coupleProfile.partnerNickname}" else "🐾 连线",
                             fontSize = 10.5.sp,
                             maxLines = 1,
                             fontWeight = FontWeight.Bold,
@@ -600,6 +620,16 @@ fun HomeScreen(
             stage = evolutionEvent!!,
             onDismiss = { PetSyncEngine.clearEvolutionCelebration() }
         )
+    }
+
+    // ================= 120 篇恋人秘密回忆相册 =================
+    if (showDiaryAlbum) {
+        DiaryAlbumDialog(onDismiss = { showDiaryAlbum = false })
+    }
+
+    // ================= 桌面情侣自律伴学番茄钟 =================
+    if (showPomodoroDialog) {
+        FocusPomodoroDialog(onDismiss = { showPomodoroDialog = false })
     }
 }
 

@@ -160,6 +160,59 @@ object PetSyncEngine {
         _evolutionCelebrationEvent.value = null
     }
 
+    // ================= 伴学自律番茄钟系统 =================
+    private val _isPomodoroActive = MutableStateFlow(false)
+    val isPomodoroActive: StateFlow<Boolean> = _isPomodoroActive.asStateFlow()
+
+    private val _pomodoroRemainingSeconds = MutableStateFlow(25 * 60)
+    val pomodoroRemainingSeconds: StateFlow<Int> = _pomodoroRemainingSeconds.asStateFlow()
+
+    private val _pomodoroTotalMinutes = MutableStateFlow(25)
+    val pomodoroTotalMinutes: StateFlow<Int> = _pomodoroTotalMinutes.asStateFlow()
+
+    private var pomodoroJob: Job? = null
+
+    fun startPomodoro(minutes: Int = 25) {
+        _pomodoroTotalMinutes.value = minutes
+        _pomodoroRemainingSeconds.value = minutes * 60
+        _isPomodoroActive.value = true
+        pomodoroJob?.cancel()
+        pomodoroJob = engineScope.launch {
+            while (_pomodoroRemainingSeconds.value > 0 && _isPomodoroActive.value) {
+                delay(1000L)
+                _pomodoroRemainingSeconds.value -= 1
+            }
+            if (_isPomodoroActive.value && _pomodoroRemainingSeconds.value <= 0) {
+                // 专注完成！结算自律学霸大奖
+                _isPomodoroActive.value = false
+                val bonusCoins = minutes * 4
+                val bonusExp = minutes * 2
+                addCoins(bonusCoins)
+                _petStats.value = addExpAndCheckLevelUp(_petStats.value, bonusExp, addSporty = 3)
+                saveStats()
+                // 解锁伴学专属回忆日记 #10
+                com.couple.pet.model.DiaryManager.unlockDiary(10)
+                _remoteEvents.tryEmit(
+                    RemotePetEvent.PartnerNoteUpdated(
+                        partnerName = _coupleProfile.value.myNickname,
+                        note = "完成了一次 ${minutes} 分钟伴学专注！金币+$bonusCoins, 经验+$bonusExp 🎓"
+                    )
+                )
+            }
+        }
+    }
+
+    fun pausePomodoro() {
+        _isPomodoroActive.value = false
+        pomodoroJob?.cancel()
+    }
+
+    fun stopPomodoro() {
+        _isPomodoroActive.value = false
+        pomodoroJob?.cancel()
+        _pomodoroRemainingSeconds.value = _pomodoroTotalMinutes.value * 60
+    }
+
     /**
      * 开发者与测试快捷指令：切换/预览指定形态
      */
@@ -202,7 +255,9 @@ object PetSyncEngine {
     fun init(context: Context) {
         if (prefs != null) return
         prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        com.couple.pet.model.DiaryManager.init(context)
         loadData()
+        com.couple.pet.model.DiaryManager.checkAutoUnlock(_petStats.value.level, _coupleProfile.value.daysTogether)
         startCompanionHeartbeat()
         if (_coupleProfile.value.isPaired) {
             SupabaseSyncService.subscribeCoupleRealtime(_coupleProfile.value.pairCode)

@@ -271,12 +271,53 @@ class DoodleDogPet : BasePet(
             }
         }
 
+        // 伴学专注模式：戴黑框小眼镜与展开翻开的小书本
+        if (com.couple.pet.network.PetSyncEngine.isPomodoroActive.value) {
+            drawStudyGlassesAndBook(canvas, headY, chestY, paints)
+        }
+
         // 非特殊排泄状态下保留默认抱小爱心 (若不是食神抱骨头或幼崽咬奶嘴)
         if (stage != com.couple.pet.model.PetGrowthStage.AWAKEN_FOODIE &&
             stage != com.couple.pet.model.PetGrowthStage.BABY &&
             !isExcreting) {
             super.drawAccessories(canvas, breath, motion, tick, paints)
         }
+    }
+
+    private fun drawStudyGlassesAndBook(canvas: Canvas, headY: Float, chestY: Float, paints: PetPaintKit) {
+        // 1. 黑框小眼镜
+        canvas.drawCircle(-8f, headY - 1f, 5.5f, paints.fineStrokePaint)
+        canvas.drawCircle(8f, headY - 1f, 5.5f, paints.fineStrokePaint)
+        canvas.drawLine(-2.5f, headY - 1f, 2.5f, headY - 1f, paints.fineStrokePaint)
+        // 镜腿微斜
+        canvas.drawLine(-13.5f, headY - 1f, -18f, headY - 3f, paints.fineStrokePaint)
+        canvas.drawLine(13.5f, headY - 1f, 18f, headY - 3f, paints.fineStrokePaint)
+
+        // 2. 胸前摊开的小书本 (两页手绘折纸)
+        val bookY = chestY + 12f
+        val bookPaint = android.graphics.Paint(paints.furPaint).apply { color = 0xFFFFFDF9.toInt() }
+        // 左书页
+        val leftPage = android.graphics.Path().apply {
+            moveTo(0f, bookY + 6f)
+            lineTo(-12f, bookY + 3f)
+            lineTo(-12f, bookY - 6f)
+            lineTo(0f, bookY - 3f)
+            close()
+        }
+        canvas.drawPath(leftPage, bookPaint)
+        canvas.drawPath(leftPage, paints.fineStrokePaint)
+        // 右书页
+        val rightPage = android.graphics.Path().apply {
+            moveTo(0f, bookY + 6f)
+            lineTo(12f, bookY + 3f)
+            lineTo(12f, bookY - 6f)
+            lineTo(0f, bookY - 3f)
+            close()
+        }
+        canvas.drawPath(rightPage, bookPaint)
+        canvas.drawPath(rightPage, paints.fineStrokePaint)
+        // 中缝书脊
+        canvas.drawLine(0f, bookY - 4f, 0f, bookY + 7f, paints.fineStrokePaint)
     }
 
     private fun drawBabyBibAndPacifier(canvas: Canvas, faceY: Float, chestY: Float, paints: PetPaintKit) {
